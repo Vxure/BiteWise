@@ -11,7 +11,7 @@ import SwiftUI
 struct BiteWiseApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppNavigation()
         }
     }
 }
