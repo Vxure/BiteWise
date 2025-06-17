@@ -8,7 +8,7 @@ enum AppScreen: Hashable {
     case detectedIngredients
     case recipeSuggestion
     case recipeDetail(Recipe)
-    case chatbot
+    case recipeAIAssistant
     case feedback
     case userProfile
 }
@@ -65,9 +65,6 @@ struct AppNavigation: View {
                         onRecipeSelected: { recipe in
                             navigationState.selectedRecipe = recipe
                             navigationState.navigateTo(.recipeDetail(recipe))
-                        },
-                        onChatbot: {
-                            navigationState.navigateTo(.chatbot)
                         }
                     )
                 
@@ -76,9 +73,8 @@ struct AppNavigation: View {
                         navigationState.navigateTo(.feedback)
                     }
                 
-                case .chatbot:
-                    ChatbotScreen {
-                        // Go back to recipe suggestions after chatbot
+                case .recipeAIAssistant:
+                    RecipeAIIntroView {
                         navigationState.navigateBack()
                     }
                 
