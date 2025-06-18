@@ -115,3 +115,4 @@ struct BulletPoint: View {
         print("Dismissed")
     }
 } 
+ 

@@ -48,19 +48,21 @@ struct PantrySetupScreen: View {
                     .font(.headline)
                     .padding(.top)
                 
-                FlowLayout(items: commonItems, spacing: 8) { item in
-                    Button(action: {
-                        toggleSelection(item)
-                    }) {
-                        Text(item)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 16)
-                            .background(
-                                Capsule()
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                    .background(Capsule().fill(Color.white))
-                            )
-                            .foregroundColor(.black)
+                FlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                    ForEach(commonItems, id: \.self) { item in
+                        Button(action: {
+                            toggleSelection(item)
+                        }) {
+                            Text(item)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 16)
+                                .background(
+                                    Capsule()
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        .background(Capsule().fill(Color.white))
+                                )
+                                .foregroundColor(.black)
+                        }
                     }
                 }
                 
@@ -70,23 +72,25 @@ struct PantrySetupScreen: View {
                         .font(.headline)
                         .padding(.top)
                     
-                    FlowLayout(items: selectedItems, spacing: 8) { item in
-                        HStack(spacing: 4) {
-                            Text(item)
-                            Button(action: {
-                                removeItem(item)
-                            }) {
-                                Image(systemName: "xmark")
-                                    .font(.footnote)
+                    FlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                        ForEach(selectedItems, id: \.self) { item in
+                            HStack(spacing: 4) {
+                                Text(item)
+                                Button(action: {
+                                    removeItem(item)
+                                }) {
+                                    Image(systemName: "xmark")
+                                        .font(.footnote)
+                                }
                             }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .background(
+                                Capsule()
+                                    .fill(Color.green.opacity(0.2))
+                            )
+                            .foregroundColor(.black)
                         }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .background(
-                            Capsule()
-                                .fill(Color.green.opacity(0.2))
-                        )
-                        .foregroundColor(.black)
                     }
                 }
                 
@@ -137,3 +141,4 @@ struct PantrySetupScreen: View {
         PantrySetupScreen(onContinue: {})
     }
 } 
+ 

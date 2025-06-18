@@ -3,6 +3,8 @@ import Foundation
 struct Ingredient: Identifiable {
     var id = UUID()
     var name: String
+    var quantity: String = ""
+    var unit: String = ""
     var isSelected: Bool = true
 }
 

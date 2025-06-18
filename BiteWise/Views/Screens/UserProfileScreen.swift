@@ -33,20 +33,22 @@ struct UserProfileScreen: View {
                     }
                     
                     // Preferences list
-                    FlowLayout(items: profile.dietaryPreferences) { preference in
-                        HStack {
-                            Text(preference)
-                            
-                            Button(action: { removePreference(preference) }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.red)
-                                    .imageScale(.small)
+                    FlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                        ForEach(profile.dietaryPreferences, id: \.self) { preference in
+                            HStack {
+                                Text(preference)
+                                
+                                Button(action: { removePreference(preference) }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.red)
+                                        .imageScale(.small)
+                                }
                             }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 12)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(20)
                         }
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 12)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(20)
                     }
                 }
                 .padding()
@@ -73,20 +75,22 @@ struct UserProfileScreen: View {
                     }
                     
                     // Allergies list
-                    FlowLayout(items: profile.allergies) { allergy in
-                        HStack {
-                            Text(allergy)
-                            
-                            Button(action: { removeAllergy(allergy) }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.red)
-                                    .imageScale(.small)
+                    FlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                        ForEach(profile.allergies, id: \.self) { allergy in
+                            HStack {
+                                Text(allergy)
+                                
+                                Button(action: { removeAllergy(allergy) }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.red)
+                                        .imageScale(.small)
+                                }
                             }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 12)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(20)
                         }
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 12)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(20)
                     }
                 }
                 .padding()
@@ -190,3 +194,4 @@ struct UserProfileScreen: View {
 #Preview {
     UserProfileScreen(onDone: {})
 } 
+ 

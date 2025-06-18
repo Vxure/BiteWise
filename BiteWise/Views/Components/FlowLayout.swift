@@ -1,79 +1,96 @@
 import SwiftUI
 
-// Flow layout for arranging items in a wrapping grid
-public struct FlowLayout<T: Hashable, V: View>: View {
-    let items: [T]
-    let spacing: CGFloat
-    @ViewBuilder let viewBuilder: (T) -> V
-    @State private var height: CGFloat = 0
+struct FlowLayout: Layout {
+    var horizontalSpacing: CGFloat
+    var verticalSpacing: CGFloat
     
-    public init(items: [T], spacing: CGFloat = 8, @ViewBuilder viewBuilder: @escaping (T) -> V) {
-        self.items = items
-        self.spacing = spacing
-        self.viewBuilder = viewBuilder
+    init(horizontalSpacing: CGFloat = 8, verticalSpacing: CGFloat = 8) {
+        self.horizontalSpacing = horizontalSpacing
+        self.verticalSpacing = verticalSpacing
     }
     
-    public var body: some View {
-        GeometryReader { geometry in
-            self.generateContent(in: geometry)
-        }
-        .frame(height: max(height, 10))
-    }
-    
-    private func generateContent(in geometry: GeometryProxy) -> some View {
-        var width = CGFloat.zero
-        var localHeight = CGFloat.zero
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
         
-        return ZStack(alignment: .topLeading) {
-            ForEach(items, id: \.self) { item in
-                viewBuilder(item)
-                    .padding([.horizontal, .vertical], 4)
-                    .alignmentGuide(.leading) { d in
-                        if abs(width - d.width) > geometry.size.width {
-                            width = 0
-                            localHeight -= d.height + spacing
-                        }
-                        
-                        let result = width
-                        if item == items.last! {
-                            width = 0
-                        } else {
-                            width -= d.width + spacing
-                        }
-                        return result
-                    }
-                    .alignmentGuide(.top) { _ in
-                        let result = localHeight
-                        if item == items.last! {
-                            localHeight = 0
-                        }
-                        return result
-                    }
+        var height: CGFloat = 0
+        var width: CGFloat = 0
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        
+        for subview in subviews {
+            let subviewSize = subview.sizeThatFits(.unspecified)
+            
+            if rowWidth + subviewSize.width > maxWidth {
+                // Start a new row
+                width = max(width, rowWidth - horizontalSpacing)
+                height += rowHeight + verticalSpacing
+                rowWidth = subviewSize.width + horizontalSpacing
+                rowHeight = subviewSize.height
+            } else {
+                // Add to the current row
+                rowWidth += subviewSize.width + horizontalSpacing
+                rowHeight = max(rowHeight, subviewSize.height)
             }
         }
-        .background(viewHeightReader($height))
+        
+        // Add the last row
+        height += rowHeight
+        width = max(width, rowWidth - horizontalSpacing)
+        
+        return CGSize(width: width, height: height)
     }
     
-    private func viewHeightReader(_ binding: Binding<CGFloat>) -> some View {
-        return GeometryReader { geometry -> Color in
-            let rect = geometry.frame(in: .local)
-            DispatchQueue.main.async {
-                binding.wrappedValue = rect.size.height
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let maxWidth = proposal.width ?? bounds.width
+        
+        var rowX: CGFloat = bounds.minX
+        var rowY: CGFloat = bounds.minY
+        var rowHeight: CGFloat = 0
+        
+        for subview in subviews {
+            let subviewSize = subview.sizeThatFits(.unspecified)
+            
+            if rowX + subviewSize.width > bounds.minX + maxWidth {
+                // Start a new row
+                rowX = bounds.minX
+                rowY += rowHeight + verticalSpacing
+                rowHeight = 0
             }
-            return .clear
+            
+            subview.place(
+                at: CGPoint(x: rowX, y: rowY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: subviewSize.width, height: subviewSize.height)
+            )
+            
+            rowX += subviewSize.width + horizontalSpacing
+            rowHeight = max(rowHeight, subviewSize.height)
         }
     }
 }
 
-#Preview {
-    FlowLayout(items: ["SwiftUI", "Flow", "Layout", "Component", "Responsive", "Design"]) { item in
-        Text(item)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(Color.blue.opacity(0.2))
-            )
+// MARK: - Preview
+struct FlowLayoutPreview: View {
+    var body: some View {
+        FlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+            ForEach(1...10, id: \.self) { index in
+                Text("Item \(index)")
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(Color(.tertiarySystemBackground))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+            }
+        }
+        .padding()
     }
-    .padding()
+}
+
+#Preview {
+    FlowLayoutPreview()
 } 
