@@ -1,6 +1,6 @@
 import Foundation
 
-struct ChatMessage: Identifiable {
+struct ChatMessage: Identifiable, Codable {
     var id = UUID()
     var text: String
     var isUser: Bool

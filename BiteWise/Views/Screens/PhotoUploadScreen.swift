@@ -1,13 +1,29 @@
 import SwiftUI
 
+// MARK: - Scroll Offset Preference Key
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // Custom spinner component using SwiftUI animations
 struct Spinner: View {
     @State private var isAnimating: Bool = false
+    var color: Color = Color.bwPrimaryCoral
 
     var body: some View {
         Circle()
             .trim(from: 0.2, to: 1)
-            .stroke(Color.green, lineWidth: 5)
+            .stroke(
+                LinearGradient(
+                    colors: [color, color.opacity(0.3)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ),
+                style: StrokeStyle(lineWidth: 5, lineCap: .round)
+            )
             .frame(width: 50, height: 50)
             .rotationEffect(Angle(degrees: isAnimating ? 360 : 0))
             .animation(
@@ -23,60 +39,262 @@ struct Spinner: View {
 
 struct PhotoUploadScreen: View {
     @State private var isAnalyzing = false
+    @State private var showImagePicker = false
+    @State private var selectedImage: UIImage?
+    @State private var errorMessage: String?
+    @ObservedObject private var sessionContext = SessionContext.shared
     var onContinue: () -> Void
     
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 40) {
-                Spacer()
-                    .frame(height: 20)
-                
-                // Header
-                VStack(spacing: 12) {
-                    Text("Show Us Your Ingredients")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .multilineTextAlignment(.center)
-                    
-                    Text("Take a photo of your fridge contents for AI ingredient detection")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 20)
-                
-                // Upload box - now using a reusable component with analyzing state
-                UploadBoxView(
-                    isAnalyzing: $isAnalyzing,
-                    onUpload: simulatePhotoAnalysis
-                )
-                .padding(.horizontal, 20)
-                
-                // Tips box - now using a reusable component
-                TipsBoxView()
-                    .padding(.horizontal, 20)
-                
-                Spacer()
-                    .frame(height: 20)
-            }
-        }
-        .background(Color(UIColor.systemBackground))
-        .navigationTitle("Photo Upload")
-        .navigationBarTitleDisplayMode(.inline)
+    // Scroll tracking state for fading header
+    @State private var scrollOffset: CGFloat = 0
+    @State private var lastScrollOffset: CGFloat = 0
+    @State private var headerVisible: Bool = true
+    
+    // Header configuration
+    private let headerHeight: CGFloat = 35
+    
+    // MARK: - Header Animation Calculations
+    
+    private var scrollProgress: CGFloat {
+        min(1, max(0, -scrollOffset / headerHeight))
     }
     
-    private func simulatePhotoAnalysis() {
-        // Set analyzing state
-        isAnalyzing = true
-        
-        // Simulate delay for analysis
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            // Navigate to detected ingredients screen after analysis completes
-            isAnalyzing = false
-            onContinue()
+    private var headerOpacity: Double {
+        if headerVisible {
+            return 1.0
         }
+        return Double(1.0 - scrollProgress)
+    }
+    
+    private var headerTranslateY: CGFloat {
+        if headerVisible {
+            return 0
+        }
+        return -headerHeight * scrollProgress
+    }
+    
+    var body: some View {
+        ZStack(alignment: .top) {
+            // Background gradient
+            BWGradients.backgroundGradient
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 32) {
+                    // Invisible anchor for scroll offset tracking
+                    GeometryReader { geometry in
+                        Color.clear
+                            .preference(
+                                key: ScrollOffsetPreferenceKey.self,
+                                value: geometry.frame(in: .named("scroll")).minY
+                            )
+                    }
+                    .frame(height: 0)
+                    
+                    // Spacer for floating header
+                    Color.clear
+                        .frame(height: headerHeight)
+                    
+                    // Header content (scrollable)
+                    VStack(spacing: 12) {
+                        Text("Show Us Your Ingredients")
+                            .font(.bwTitle2())
+                            .multilineTextAlignment(.center)
+                        
+                        Text("Take a photo of your fridge contents for AI ingredient detection")
+                            .font(.bwSubheadline())
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 20)
+                    .staggeredAppear(index: 0)
+                    
+                    // Upload box - now using a reusable component with analyzing state
+                    UploadBoxView(
+                        isAnalyzing: $isAnalyzing,
+                        onUpload: { showImagePicker = true }
+                    )
+                    .padding(.horizontal, 20)
+                    .staggeredAppear(index: 1)
+                    
+                    // Tips box
+                    TipsBoxView()
+                        .padding(.horizontal, 20)
+                        .staggeredAppear(index: 2)
+                    
+                    // Manual entry option - modernized card style
+                    Button(action: enterManually) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.bwPrimary.opacity(0.1))
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: "pencil.line")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(Color.bwPrimary)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Enter Manually")
+                                    .font(BWTypography.bodyPrimary)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                Text("Type your ingredients yourself")
+                                    .font(BWTypography.captionSmall)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.gray.opacity(0.5))
+                        }
+                        .padding(15)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.white)
+                                .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
+                        )
+                    }
+                    .buttonStyle(.bwPressable)
+                    .padding(.horizontal, 20)
+                    .padding(.top, -20)
+                    .staggeredAppear(index: 3)
+                    
+                    // Security note - compact dark green card
+                    SecurityNoteView()
+                        .padding(.horizontal, 20)
+                        .padding(.top, -20)
+                        .staggeredAppear(index: 4)
+                    
+                    Spacer()
+                        .frame(height: -100)
+
+                }
+            }
+            .coordinateSpace(name: "scroll")
+            .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+                handleScrollChange(newOffset: value)
+            }
+            
+            // MARK: - Floating Title Overlay
+            VStack(spacing: 0) {
+                Text("Photo Upload")
+                    .font(BWTypography.sectionHeader)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
+            }
+            .frame(maxWidth: .infinity)
+            .background(
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.bwGradientCream, location: 0),
+                        .init(color: Color.bwGradientCream, location: 0.6),
+                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
+                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .offset(y: headerTranslateY)
+            .opacity(headerOpacity)
+            .animation(.easeOut(duration: 0.2), value: headerVisible)
+        }
+        .navigationBarHidden(true)
+        .sheet(isPresented: $showImagePicker) {
+            ImageSourceSheet(
+                isPresented: $showImagePicker,
+                selectedImage: $selectedImage
+            )
+        }
+        .onChange(of: selectedImage) { _, newImage in
+            if let image = newImage {
+                analyzeImage(image)
+            }
+        }
+        .alert("Error", isPresented: .constant(errorMessage != nil)) {
+            Button("OK") {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "An error occurred")
+        }
+    }
+    
+    // MARK: - Scroll Handling
+    
+    private func handleScrollChange(newOffset: CGFloat) {
+        let delta = newOffset - lastScrollOffset
+        
+        if delta > 2 {
+            if !headerVisible {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    headerVisible = true
+                }
+            }
+        } else if delta < -2 {
+            if headerVisible && newOffset < -10 {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    headerVisible = false
+                }
+            }
+        }
+        
+        if newOffset >= -5 {
+            if !headerVisible {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    headerVisible = true
+                }
+            }
+        }
+        
+        scrollOffset = newOffset
+        lastScrollOffset = newOffset
+    }
+    
+    /// Analyze the selected image using GeminiService
+    private func analyzeImage(_ image: UIImage) {
+        isAnalyzing = true
+        sessionContext.analyzedImage = image
+        
+        Task {
+            do {
+                // Call GeminiService to analyze image
+                let ingredients = try await GeminiService.shared.analyzeImage(image)
+                
+                await MainActor.run {
+                    // Store results in session context
+                    sessionContext.detectedIngredients = ingredients
+                    isAnalyzing = false
+                    selectedImage = nil
+                    
+                    // Navigate to detected ingredients screen
+                    onContinue()
+                }
+            } catch {
+                await MainActor.run {
+                    isAnalyzing = false
+                    selectedImage = nil
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+    
+    /// Skip photo upload and enter ingredients manually
+    private func enterManually() {
+        // Clear any previous detected ingredients
+        sessionContext.detectedIngredients = []
+        sessionContext.analyzedImage = nil
+        
+        // Navigate to detected ingredients screen with empty state
+        onContinue()
     }
 }
 
@@ -84,65 +302,103 @@ struct PhotoUploadScreen: View {
 struct UploadBoxView: View {
     @Binding var isAnalyzing: Bool
     var onUpload: () -> Void
+    @State private var isPressed = false
+    @State private var animationAngle: Double = 0
     
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
-                .foregroundColor(.gray.opacity(0.5))
-                .frame(height: 320)
+            // Background
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+            
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.6))
+            
+            // Animated gradient border
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [
+                            Color.bwPrimaryCoral,
+                            Color.bwPrimaryOrange,
+                            Color.bwAccentGold,
+                            Color.bwPrimaryCoral.opacity(0.5),
+                            Color.bwPrimaryCoral
+                        ]),
+                        center: .center,
+                        angle: .degrees(animationAngle)
+                    ),
+                    lineWidth: 3
+                )
             
             if isAnalyzing {
                 // Analyzing state
                 VStack(spacing: 24) {
-                    // Custom spinner instead of ProgressView
+                    // Custom spinner
                     Spinner()
                         .padding()
                     
                     Text("Analyzing your fridge...")
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(.green)
+                        .font(.bwTitle3())
+                        .foregroundColor(Color.bwPrimaryCoral)
                         .multilineTextAlignment(.center)
                 }
             } else {
                 // Empty state with camera icon and text
                 VStack(spacing: 24) {
-                    Image(systemName: "camera.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 50, height: 50)
-                        .foregroundColor(.gray.opacity(0.7))
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.bwPrimaryCoral.opacity(0.15), Color.bwPrimaryOrange.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 80, height: 80)
+                        
+                        Image(systemName: "camera.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 36, height: 36)
+                            .foregroundColor(Color.bwPrimaryCoral)
+                    }
                     
                     Text("Tap to take a photo or upload from gallery")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
+                        .font(.bwSubheadline())
+                        .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                     
                     // Upload button inside the box
-                    Button(action: onUpload) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "camera.fill")
-                                .font(.body)
-                            
-                            Text("Upload Fridge Photo")
-                                .font(.headline)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 20)
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                    }
-                    .padding(.top, 8)
+                    GradientButton(
+                        icon: "camera.fill",
+                        text: "Upload Fridge Photo",
+                        action: onUpload
+                    )
+                    .padding(.horizontal, 20)
                 }
                 .padding(.horizontal, 24)
+                .padding(.vertical, 32)
             }
         }
+        .frame(height: 320)
+        .scaleEffect(isPressed && !isAnalyzing ? 0.98 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
+        .shadow(color: Color.bwPrimaryCoral.opacity(0.25), radius: 20, x: 0, y: 10)
         .contentShape(Rectangle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in if !isAnalyzing { isPressed = true } }
+                .onEnded { _ in isPressed = false }
+        )
         .onTapGesture {
             if !isAnalyzing {
                 onUpload()
+            }
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 4).repeatForever(autoreverses: false)) {
+                animationAngle = 360
             }
         }
     }
@@ -151,10 +407,15 @@ struct UploadBoxView: View {
 // Reusable tips box component
 struct TipsBoxView: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Tips for best results:")
-                .font(.headline)
-                .foregroundColor(Color.blue.opacity(0.8))
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "lightbulb.fill")
+                    .foregroundColor(Color.bwAccentGold)
+                Text("Tips for best results:")
+                    .font(.bwHeadline())
+                    .foregroundColor(Color.bwAccentGold)
+                Spacer()
+            }
             
             VStack(alignment: .leading, spacing: 10) {
                 BulletPointView(text: "Ensure good lighting")
@@ -162,9 +423,34 @@ struct TipsBoxView: View {
                 BulletPointView(text: "Include expiration dates if possible")
             }
         }
-        .padding(16)
-        .background(Color.blue.opacity(0.1))
-        .cornerRadius(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bwCardStyle(padding: 16, cornerRadius: 16)
+    }
+}
+
+// Security note component - compact dark green tinted card
+struct SecurityNoteView: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(Color.bwAccentGreen)
+            
+            Text("Your photo is analyzed securely and never stored.")
+                .font(BWTypography.captionSmall)
+                .foregroundColor(Color.bwAccentGreen.opacity(0.9))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.bwAccentGreen.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.bwAccentGreen.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
@@ -172,14 +458,14 @@ struct BulletPointView: View {
     let text: String
     
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text("•")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(Color.blue.opacity(0.8))
+        HStack(alignment: .center, spacing: 10) {
+            Circle()
+                .fill(Color.bwAccentGold)
+                .frame(width: 6, height: 6)
             
             Text(text)
-                .font(.callout)
-                .foregroundColor(Color.blue.opacity(0.8))
+                .font(.bwSubheadline())
+                .foregroundColor(.primary.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -189,5 +475,4 @@ struct BulletPointView: View {
     NavigationStack {
         PhotoUploadScreen(onContinue: {})
     }
-} 
- 
+}

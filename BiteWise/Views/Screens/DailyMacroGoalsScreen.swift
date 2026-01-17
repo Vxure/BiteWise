@@ -2,12 +2,7 @@ import SwiftUI
 
 struct DailyMacroGoalsScreen: View {
     @Environment(\.dismiss) private var dismiss
-    
-    // Custom colors
-    private let caloriesColor = Color(hex: "4285F4")  // Blue
-    private let proteinColor = Color(hex: "34A853")   // Green
-    private let carbsColor = Color(hex: "FBBC05")     // Orange/Yellow
-    private let fatColor = Color(hex: "A142F4")       // Purple
+    @ObservedObject private var dataManager = DataManager.shared
     
     // Current date formatted
     private var formattedDate: String {
@@ -16,74 +11,125 @@ struct DailyMacroGoalsScreen: View {
         return formatter.string(from: Date())
     }
     
+    // Get macro goals from user profile
+    private var goals: (calories: Int, protein: Int, carbs: Int, fats: Int) {
+        dataManager.macroGoalsInGrams
+    }
+    
+    // Calculate percentages for today
+    private var todayCaloriesPercent: Int {
+        guard goals.calories > 0 else { return 0 }
+        return min(100, Int((Double(dataManager.dailyMacros.caloriesConsumed) / Double(goals.calories)) * 100))
+    }
+    
+    private var todayProteinPercent: Int {
+        guard goals.protein > 0 else { return 0 }
+        return min(100, Int((dataManager.dailyMacros.proteinConsumed / Double(goals.protein)) * 100))
+    }
+    
+    private var todayCarbsPercent: Int {
+        guard goals.carbs > 0 else { return 0 }
+        return min(100, Int((dataManager.dailyMacros.carbsConsumed / Double(goals.carbs)) * 100))
+    }
+    
+    private var todayFatsPercent: Int {
+        guard goals.fats > 0 else { return 0 }
+        return min(100, Int((dataManager.dailyMacros.fatsConsumed / Double(goals.fats)) * 100))
+    }
+    
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Today's Progress Card
-                todaysProgressCard
-                
-                // Macro Summary Grid
-                macroSummaryGrid
-                
-                // Weekly Progress Card
-                weeklyProgressCard
+        ZStack {
+            // Background gradient
+            BWGradients.backgroundGradient
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Today's Progress Card
+                    todaysProgressCard
+                    
+                    // Macro Summary Grid
+                    macroSummaryGrid
+                    
+                    // Weekly Progress Card
+                    weeklyProgressCard
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 100)
             }
-            .padding()
         }
-        .background(Color(.systemGroupedBackground))
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle("Daily Macro Goals")
+        .customNavigation()
     }
     
     // MARK: - Today's Progress Card
     private var todaysProgressCard: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             Text("Today's Progress")
-                .font(.system(size: 32, weight: .bold))
+                .font(.system(size: 28, weight: .bold, design: .rounded))
             
             Text(formattedDate)
-                .font(.title3)
+                .font(.bwSubheadline())
                 .foregroundColor(.secondary)
             
             // Streak badge
-            Text("🔥 7 day streak")
-                .font(.subheadline)
-                .fontWeight(.medium)
+            let streak = dataManager.currentStreak
+            if streak > 0 {
+                HStack(spacing: 6) {
+                    Text("🔥")
+                    Text("\(streak) day streak")
+                        .font(.bwSubheadline())
+                        .fontWeight(.semibold)
+                }
                 .foregroundColor(.orange)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.15))
-                .cornerRadius(20)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color.orange.opacity(0.15))
+                )
+            } else {
+                HStack(spacing: 6) {
+                    Text("🎯")
+                    Text("Start tracking today!")
+                        .font(.bwSubheadline())
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color.gray.opacity(0.1))
+                )
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color(.systemBackground))
-        )
+        .bwCardStyle()
     }
     
     // MARK: - Macro Summary Grid
     private var macroSummaryGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-            // Calories
+            // Calories with circular progress
             macroCard(
                 title: "Calories",
                 emoji: "🔥",
-                current: 1650,
-                goal: 2000,
-                percent: 83,
-                color: caloriesColor
+                current: dataManager.dailyMacros.caloriesConsumed,
+                goal: goals.calories,
+                percent: todayCaloriesPercent,
+                color: Color.bwPrimaryCoral
             )
             
             // Protein
             macroCard(
                 title: "Protein",
                 emoji: "💪",
-                current: 128,
-                goal: 150,
-                percent: 85,
-                color: proteinColor,
+                current: Int(dataManager.dailyMacros.proteinConsumed),
+                goal: goals.protein,
+                percent: todayProteinPercent,
+                color: Color.bwProtein,
                 unit: "g"
             )
             
@@ -91,10 +137,10 @@ struct DailyMacroGoalsScreen: View {
             macroCard(
                 title: "Carbs",
                 emoji: "⚡️",
-                current: 145,
-                goal: 200,
-                percent: 73,
-                color: carbsColor,
+                current: Int(dataManager.dailyMacros.carbsConsumed),
+                goal: goals.carbs,
+                percent: todayCarbsPercent,
+                color: Color.bwCarbs,
                 unit: "g"
             )
             
@@ -102,216 +148,201 @@ struct DailyMacroGoalsScreen: View {
             macroCard(
                 title: "Fat",
                 emoji: "🥑",
-                current: 52,
-                goal: 67,
-                percent: 78,
-                color: fatColor,
+                current: Int(dataManager.dailyMacros.fatsConsumed),
+                goal: goals.fats,
+                percent: todayFatsPercent,
+                color: Color.bwAccentRose,
                 unit: "g"
             )
         }
     }
     
     private func macroCard(title: String, emoji: String, current: Int, goal: Int, percent: Int, color: Color, unit: String = "") -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 12) {
+            // Header with title and emoji
             HStack {
                 Text(title)
-                    .font(.title3)
-                    .fontWeight(.semibold)
+                    .font(.bwHeadline())
                     .foregroundColor(.white)
                 
                 Spacer()
                 
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.3))
-                        .frame(width: 36, height: 36)
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: 32, height: 32)
                     
                     Text(emoji)
-                        .font(.system(size: 18))
+                        .font(.system(size: 16))
                 }
             }
             
+            // Circular progress with value inside
+            ZStack {
+                CircularProgressRing(
+                    progress: Double(percent) / 100,
+                    lineWidth: 8,
+                    backgroundColor: Color.white.opacity(0.25),
+                    foregroundColor: .white
+                )
+                .frame(width: 70, height: 70)
+                
+                VStack(spacing: 0) {
+                    Text("\(percent)")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("%")
+                        .font(.bwCaption2())
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
+            
+            // Values
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(current)")
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                 
                 Text("/ \(goal)\(unit)")
-                    .font(.title3)
+                    .font(.bwCaption())
                     .foregroundColor(.white.opacity(0.8))
             }
-            
-            // Progress bar
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.white.opacity(0.3))
-                    .frame(height: 8)
-                
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.white)
-                    .frame(width: CGFloat(percent) / 100 * (UIScreen.main.bounds.width / 2 - 40), height: 8)
-            }
-            
-            Text("\(percent)% complete")
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.9))
         }
-        .padding(20)
-        .frame(height: 180)
+        .padding(16)
+        .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(color)
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(
+                        LinearGradient(
+                            colors: [color, color.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                // Shine overlay
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.2), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+            }
         )
-        .shadow(color: color.opacity(0.3), radius: 5, x: 0, y: 2)
+        .shadow(color: color.opacity(0.4), radius: 8, x: 0, y: 4)
     }
     
     // MARK: - Weekly Progress Card
     private var weeklyProgressCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Weekly Progress")
-                .font(.title)
-                .fontWeight(.bold)
-                .padding(.bottom, 8)
+                .font(.bwTitle2())
+                .padding(.bottom, 4)
             
-            // June 10
-            dailyProgressRow(
-                date: "Jun 10", 
-                calories: (1800, 2000),
-                protein: (132, 150),
-                carbs: (144, 200),
-                fat: (57, 67)
-            )
+            let recentLogs = dataManager.getRecentMacroLogs(days: 7)
             
-            // June 11
-            dailyProgressRow(
-                date: "Jun 11", 
-                calories: (1560, 2000),
-                protein: (138, 150),
-                carbs: (136, 200),
-                fat: (60, 67)
-            )
-            
-            // June 12
-            dailyProgressRow(
-                date: "Jun 12", 
-                calories: (1760, 2000),
-                protein: (128, 150),
-                carbs: (150, 200),
-                fat: (55, 67)
-            )
-            
-            // June 13
-            dailyProgressRow(
-                date: "Jun 13", 
-                calories: (1840, 2000),
-                protein: (135, 150),
-                carbs: (160, 200),
-                fat: (59, 67)
-            )
-            
-            // June 14
-            dailyProgressRow(
-                date: "Jun 14", 
-                calories: (1700, 2000),
-                protein: (143, 150),
-                carbs: (146, 200),
-                fat: (52, 67)
-            )
-            
-            // June 15
-            dailyProgressRow(
-                date: "Jun 15", 
-                calories: (1800, 2000),
-                protein: (131, 150),
-                carbs: (170, 200),
-                fat: (62, 67)
-            )
-            
-            // Today
-            dailyProgressRow(
-                date: "Today", 
-                calories: (1650, 2000),
-                protein: (128, 150),
-                carbs: (145, 200),
-                fat: (52, 67)
-            )
+            if recentLogs.isEmpty || recentLogs.allSatisfy({ $0.caloriesConsumed == 0 }) {
+                // Empty state
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.bar.doc.horizontal")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary.opacity(0.5))
+                    
+                    Text("No tracking data yet")
+                        .font(.bwBody())
+                        .foregroundColor(.secondary)
+                    
+                    Text("Mark recipes as cooked to start tracking your macros")
+                        .font(.bwCaption())
+                        .foregroundColor(.secondary.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 30)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(recentLogs.enumerated()), id: \.element.dateString) { index, log in
+                        dailyProgressRow(
+                            log: log,
+                            goals: goals,
+                            isToday: log.isToday
+                        )
+                        
+                        if index < recentLogs.count - 1 {
+                            Divider().padding(.vertical, 8)
+                        }
+                    }
+                }
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 20)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bwCardStyle()
     }
     
-    private func dailyProgressRow(date: String, calories: (Int, Int), protein: (Int, Int), carbs: (Int, Int), fat: (Int, Int)) -> some View {
-        VStack(spacing: 8) {
-            Text(date)
-                .font(.headline)
-                .fontWeight(.medium)
+    private func dailyProgressRow(log: DailyMacroLog, goals: (calories: Int, protein: Int, carbs: Int, fats: Int), isToday: Bool) -> some View {
+        VStack(spacing: 10) {
+            Text(isToday ? "Today" : log.displayDateString)
+                .font(.bwHeadline())
+                .foregroundColor(isToday ? Color.bwPrimaryCoral : .primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 2)
             
-            HStack(spacing: 10) {
-                // Calories progress
+            HStack(spacing: 8) {
                 macroProgressItem(
-                    value: calories.0,
-                    goal: calories.1,
-                    label: "Cals",
-                    color: caloriesColor
+                    value: log.caloriesConsumed,
+                    goal: goals.calories,
+                    label: "Cal",
+                    color: Color.bwPrimaryCoral
                 )
-                
-                // Protein progress
                 macroProgressItem(
-                    value: protein.0,
-                    goal: protein.1,
-                    label: "Protein",
-                    color: proteinColor
+                    value: Int(log.proteinConsumed),
+                    goal: goals.protein,
+                    label: "Pro",
+                    color: Color.bwProtein
                 )
-                
-                // Carbs progress
                 macroProgressItem(
-                    value: carbs.0,
-                    goal: carbs.1,
-                    label: "Carbs",
-                    color: carbsColor
+                    value: Int(log.carbsConsumed),
+                    goal: goals.carbs,
+                    label: "Carb",
+                    color: Color.bwCarbs
                 )
-                
-                // Fat progress
                 macroProgressItem(
-                    value: fat.0,
-                    goal: fat.1,
-                    label: "Fats",
-                    color: fatColor
+                    value: Int(log.fatsConsumed),
+                    goal: goals.fats,
+                    label: "Fat",
+                    color: Color.bwAccentRose
                 )
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 4)
     }
     
     private func macroProgressItem(value: Int, goal: Int, label: String, color: Color) -> some View {
-        VStack(spacing: 2) {
-            // Progress bar with rounded corners
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(color.opacity(0.2))
-                    .frame(height: 8)
+        let progress = goal > 0 ? min(1.0, Double(value) / Double(goal)) : 0
+        
+        return VStack(spacing: 4) {
+            // Mini circular progress
+            ZStack {
+                Circle()
+                    .stroke(color.opacity(0.2), lineWidth: 3)
+                    .frame(width: 32, height: 32)
                 
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(color)
-                    .frame(width: CGFloat(value) / CGFloat(goal) * (UIScreen.main.bounds.width - 120) / 4, height: 8)
+                Circle()
+                    .trim(from: 0, to: CGFloat(progress))
+                    .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .frame(width: 32, height: 32)
+                    .rotationEffect(.degrees(-90))
             }
             
             Text(label)
-                .font(.caption2)
+                .font(.bwCaption2())
                 .foregroundColor(.secondary)
-                .padding(.top, 2)
             
-            Text("\(value)/\(goal)")
-                .font(.caption)
+            Text("\(value)")
+                .font(.bwCaption())
+                .fontWeight(.semibold)
                 .foregroundColor(.primary)
         }
         .frame(maxWidth: .infinity)
@@ -322,4 +353,4 @@ struct DailyMacroGoalsScreen: View {
     NavigationStack {
         DailyMacroGoalsScreen()
     }
-} 
+}

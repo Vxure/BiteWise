@@ -7,72 +7,141 @@ struct FeedbackScreen: View {
     var onDone: () -> Void
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 30) {
-                Text("Recipe Feedback")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .padding(.top)
-                
-                Text("How would you rate this recipe?")
-                    .font(.title3)
-                
-                // Star rating
-                HStack {
-                    ForEach(1...5, id: \.self) { star in
-                        Image(systemName: star <= rating ? "star.fill" : "star")
-                            .font(.title)
-                            .foregroundColor(star <= rating ? .yellow : .gray)
-                            .onTapGesture {
-                                rating = star
-                            }
+        ZStack {
+            // Background gradient
+            BWGradients.backgroundGradient
+                .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 8) {
+                        Text("Send Feedback")
+                            .font(.bwLargeTitle())
+                        
+                        Text("Help us improve BiteWise")
+                            .font(.bwSubheadline())
+                            .foregroundColor(.secondary)
                     }
-                }
-                .padding()
-                
-                // Enjoyed recipe toggle
-                Toggle(isOn: $enjoyedRecipe) {
-                    Text("I enjoyed this recipe")
-                        .font(.headline)
-                }
-                .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(12)
-                
-                // Comments section
-                VStack(alignment: .leading) {
-                    Text("Comments")
-                        .font(.headline)
+                    .padding(.top)
                     
-                    TextEditor(text: $comments)
-                        .frame(minHeight: 100)
-                        .padding(4)
+                    // Star rating card
+                    VStack(spacing: 16) {
+                        Text("How would you rate the app?")
+                            .font(.bwHeadline())
+                        
+                        HStack(spacing: 12) {
+                            ForEach(1...5, id: \.self) { star in
+                                Image(systemName: star <= rating ? "star.fill" : "star")
+                                    .font(.system(size: 36))
+                                    .foregroundColor(star <= rating ? .yellow : .gray.opacity(0.3))
+                                    .scaleEffect(star <= rating ? 1.1 : 1.0)
+                                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: rating)
+                                    .onTapGesture {
+                                        BWHaptics.lightImpact()
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                            rating = star
+                                        }
+                                    }
+                            }
+                        }
+                        
+                        if rating > 0 {
+                            Text(ratingText)
+                                .font(.bwSubheadline())
+                                .foregroundColor(.secondary)
+                                .transition(.opacity.combined(with: .scale))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .bwCardStyle()
+                    
+                    // Enjoyed app toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("I enjoy using BiteWise")
+                                .font(.bwHeadline())
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                            Text("Helps us understand satisfaction")
+                                .font(.bwCaption())
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: $enjoyedRecipe)
+                            .toggleStyle(SwitchToggleStyle(tint: Color.bwAccentGreen))
+                            .labelsHidden()
+                    }
+                    .bwCardStyle()
+                    
+                    // Comments section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Additional Comments")
+                            .font(.bwHeadline())
+                        
+                        ZStack(alignment: .topLeading) {
+                            if comments.isEmpty {
+                                Text("Share your thoughts, suggestions, or report issues...")
+                                    .font(.bwBody())
+                                    .foregroundColor(.gray.opacity(0.5))
+                                    .padding(.top, 12)
+                                    .padding(.leading, 12)
+                            }
+                            
+                            TextEditor(text: $comments)
+                                .font(.bwBody())
+                                .frame(minHeight: 120)
+                                .padding(8)
+                                .scrollContentBackground(.hidden)
+                                .background(Color.clear)
+                        }
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.white.opacity(0.6))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
                                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
                         )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .bwCardStyle()
+                    
+                    // Submit button
+                    GradientButton(
+                        icon: "paperplane.fill",
+                        text: "Submit Feedback",
+                        action: {
+                            BWHaptics.success()
+                            onDone()
+                        }
+                    )
+                    .padding(.top, 8)
+                    
+                    Spacer()
                 }
-                .padding()
-                
-                // Submit button
-                Button(action: onDone) {
-                    Text("Submit Feedback")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.green)
-                        .cornerRadius(12)
-                }
-                .padding(.horizontal, 40)
-                
-                Spacer()
+                .padding(.horizontal, 20)
+                .padding(.bottom, 100)
             }
-            .padding()
+        }
+        .customNavigation()
+    }
+    
+    private var ratingText: String {
+        switch rating {
+        case 1: return "Not great 😔"
+        case 2: return "Could be better 🤔"
+        case 3: return "It's okay 👍"
+        case 4: return "Really good! 😊"
+        case 5: return "Love it! 🌟"
+        default: return ""
         }
     }
 }
 
 #Preview {
     FeedbackScreen(onDone: {})
-} 
+}
