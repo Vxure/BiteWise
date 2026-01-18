@@ -374,6 +374,86 @@ class DataManager: ObservableObject {
         )
     }
     
+    // MARK: - Ingredient Deduction
+    
+    /// Deduct ingredients from inventory when a recipe is marked as cooked
+    /// - Parameter recipe: The recipe that was cooked
+    /// - Returns: Array of ingredient names that were removed from inventory
+    /// Note: Staple items (isStaple == true) are NOT deducted - they are assumed to always be available
+    @discardableResult
+    func deductIngredients(for recipe: Recipe) -> [String] {
+        var removedItems: [String] = []
+        
+        for ingredientString in recipe.ingredients {
+            // Extract the main ingredient name from the string
+            let name = parseIngredientName(from: ingredientString)
+            
+            // Check fridge items first
+            if let index = fridgeItems.firstIndex(where: { 
+                $0.name.lowercased().contains(name.lowercased()) ||
+                name.lowercased().contains($0.name.lowercased())
+            }) {
+                let item = fridgeItems[index]
+                // Skip staple items - they don't get deducted
+                if !item.isStaple {
+                    removedItems.append(item.name)
+                    fridgeItems.remove(at: index)
+                }
+            }
+            // Then check pantry items
+            else if let index = pantryItems.firstIndex(where: { 
+                $0.name.lowercased().contains(name.lowercased()) ||
+                name.lowercased().contains($0.name.lowercased())
+            }) {
+                let item = pantryItems[index]
+                // Skip staple items - they don't get deducted (pantry items are staples by default)
+                if !item.isStaple {
+                    removedItems.append(item.name)
+                    pantryItems.remove(at: index)
+                }
+            }
+        }
+        
+        // Save changes if any items were removed
+        if !removedItems.isEmpty {
+            saveFridgeItems()
+            savePantryItems()
+        }
+        
+        return removedItems
+    }
+    
+    /// Parse an ingredient string to extract the main ingredient name
+    /// Examples: "2 chicken breasts" -> "chicken", "1 cup spinach" -> "spinach"
+    private func parseIngredientName(from ingredientString: String) -> String {
+        // Common measurement words to skip
+        let measurementWords = Set([
+            "cup", "cups", "tbsp", "tablespoon", "tablespoons", "tsp", "teaspoon", "teaspoons",
+            "oz", "ounce", "ounces", "lb", "pound", "pounds", "g", "gram", "grams",
+            "kg", "kilogram", "ml", "liter", "liters", "pinch", "dash", "slice", "slices",
+            "piece", "pieces", "clove", "cloves", "bunch", "can", "cans", "package", "packages",
+            "large", "small", "medium", "fresh", "dried", "chopped", "minced", "diced",
+            "sliced", "grated", "shredded", "to", "taste", "for", "garnish", "optional"
+        ])
+        
+        // Split the string and filter out numbers and measurement words
+        let words = ingredientString
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .filter { word in
+                // Filter out numbers
+                if Double(word) != nil { return false }
+                // Filter out measurement words
+                if measurementWords.contains(word) { return false }
+                // Keep words with 2+ characters
+                return word.count >= 2
+            }
+        
+        // Return the first meaningful word, or the whole string if parsing fails
+        return words.first ?? ingredientString.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
     // MARK: - Recipe Ratings
     func saveRecipeRatings() {
         // Convert UUID keys to strings for storage

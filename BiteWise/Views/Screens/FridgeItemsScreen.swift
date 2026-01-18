@@ -179,18 +179,16 @@ struct FridgeItemsScreen: View {
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
             
-            // Floating action button
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    scanMoreButton
-                        .allowsHitTesting(true)
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 90)
+            // Expandable Floating Action Button
+            ExpandableFAB(
+                accentColor: .bwAccentBlue,
+                onScan: {
+                    navigationState.navigateTo(.photoUpload)
+                },
+                onManual: {
+                    showingAddItemSheet = true
                 }
-            }
-            .allowsHitTesting(false)
+            )
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showingAddItemSheet) {
@@ -338,36 +336,6 @@ struct FridgeItemsScreen: View {
         }
     }
     
-    // MARK: - Scan More Button
-    private var scanMoreButton: some View {
-        Button(action: {
-            BWHaptics.mediumImpact()
-            navigationState.navigateTo(.photoUpload)
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                Text("Scan")
-                    .font(BWTypography.buttonSmall)
-                    .fontWeight(.semibold)
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.bwAccentBlue, Color.bwAccentBlue.opacity(0.85)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .shadow(color: Color.bwAccentBlue.opacity(0.4), radius: 12, x: 0, y: 6)
-        }
-        .buttonStyle(.bwPressable)
-    }
 }
 
 // MARK: - Fridge Item Row

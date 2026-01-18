@@ -5,6 +5,7 @@ struct ChatbotScreen: View {
     @State private var isTyping = false
     @FocusState private var isInputFocused: Bool
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var selectedRecipeForNavigation: Recipe?
     @ObservedObject private var sessionContext = SessionContext.shared
     @ObservedObject private var dataManager = DataManager.shared
     
@@ -72,8 +73,11 @@ struct ChatbotScreen: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(messages) { message in
-                                ChatBubble(message: message)
-                                    .id(message.id)
+                                ChatBubble(message: message) { tappedRecipe in
+                                    // Handle recipe card tap - navigate to recipe detail
+                                    selectedRecipeForNavigation = tappedRecipe
+                                }
+                                .id(message.id)
                             }
                             
                             // Typing indicator
@@ -150,6 +154,11 @@ struct ChatbotScreen: View {
             // Clear active session when leaving this screen
             sessionContext.clearActiveChatSession()
         }
+        .sheet(item: $selectedRecipeForNavigation) { recipeToShow in
+            NavigationStack {
+                RecipeDetailScreen(recipe: recipeToShow, onFeedback: {})
+            }
+        }
     }
     
     /// Handle done button
@@ -167,7 +176,7 @@ struct ChatbotScreen: View {
             } else {
                 // Start a new recipe-specific session
                 let session = sessionContext.startNewChatSession(
-                    title: "Help with \(recipe.title)",
+                    title: recipe.title,
                     recipeId: recipe.id
                 )
                 // Add initial contextual message
@@ -202,7 +211,7 @@ struct ChatbotScreen: View {
         // Ensure we have a session
         if sessionContext.activeChatSession == nil {
             sessionContext.startNewChatSession(
-                title: recipe != nil ? "Help with \(recipe!.title)" : "New Chat",
+                title: recipe != nil ? recipe!.title : "New Chat",
                 recipeId: recipe?.id
             )
         }
@@ -216,6 +225,19 @@ struct ChatbotScreen: View {
         
         // Call Gemini API
         Task {
+            // DEMO TRIGGER: If user types "show recipe", show a dummy recipe card
+            if userText.lowercased().contains("show recipe") {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s delay
+                await MainActor.run {
+                    isTyping = false
+                    let botMessage = ChatMessage(text: "Here's a great recipe for you to try:", isUser: false)
+                    sessionContext.addMessageToActiveSession(botMessage)
+                    let recipeMessage = ChatMessage(recipe: Recipe.dummyData[0], isUser: false)
+                    sessionContext.addMessageToActiveSession(recipeMessage)
+                }
+                return
+            }
+            
             do {
                 let response = try await GeminiService.shared.chat(
                     message: userText,

@@ -3,13 +3,15 @@ import Foundation
 // MARK: - Scan Merge Mode
 
 /// Defines how new scan results should be merged with existing fridge items
-enum ScanMergeMode: String, CaseIterable {
+enum ScanMergeMode: String, CaseIterable, Codable {
+    case askEveryTime = "Ask Every Time"
     case replace = "Replace All"
     case add = "Add to Existing"
     case smartMerge = "Smart Merge"
     
     var description: String {
         switch self {
+        case .askEveryTime: return "Show options each time you scan"
         case .replace: return "Clear fridge and use only new items"
         case .add: return "Keep existing items, add new ones"
         case .smartMerge: return "Update quantities, resolve duplicates"
@@ -18,10 +20,16 @@ enum ScanMergeMode: String, CaseIterable {
     
     var icon: String {
         switch self {
+        case .askEveryTime: return "questionmark.circle"
         case .replace: return "arrow.triangle.2.circlepath"
         case .add: return "plus.circle"
         case .smartMerge: return "arrow.triangle.merge"
         }
+    }
+    
+    /// Returns merge mode options (excludes askEveryTime for the modal picker)
+    static var mergeModes: [ScanMergeMode] {
+        [.smartMerge, .add, .replace]
     }
 }
 
@@ -58,13 +66,16 @@ struct FridgeItem: Identifiable, Codable, Hashable {
     var quantity: String
     var category: String  // protein, dairy, vegetable, fruit, condiment, other
     var dateAdded: Date   // when this item was scanned/added
+    /// Staple items (like spices) are not deducted when cooking - fridge items default to false
+    var isStaple: Bool = false
     
-    init(id: UUID = UUID(), name: String, quantity: String = "", category: String = "other", dateAdded: Date = Date()) {
+    init(id: UUID = UUID(), name: String, quantity: String = "", category: String = "other", dateAdded: Date = Date(), isStaple: Bool = false) {
         self.id = id
         self.name = name
         self.quantity = quantity
         self.category = category
         self.dateAdded = dateAdded
+        self.isStaple = isStaple
     }
 }
 

@@ -19,6 +19,9 @@ struct DashboardView: View {
     @State private var lastScrollOffset: CGFloat = 0
     @State private var headerVisible: Bool = true
     
+    // Empty state CTA action
+    @State private var showingLogBreakfastSheet: Bool = false
+    
     // Header configuration
     private let headerHeight: CGFloat = 45
     
@@ -581,7 +584,7 @@ struct DashboardView: View {
                     }) {
                         Text("View All")
                             .font(BWTypography.buttonSmall)
-                            .foregroundColor(Color.bwPrimary)
+                            .foregroundColor(Color.bwPantryBrown)
                     }
                 }
             }
@@ -595,16 +598,16 @@ struct DashboardView: View {
                         Circle()
                             .fill(
                                 LinearGradient(
-                                    colors: [Color.bwPrimary.opacity(0.15), Color.bwPrimary.opacity(0.05)],
+                                    colors: [Color.bwPantryBrown.opacity(0.2), Color.bwPantryBrown.opacity(0.08)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
                             .frame(width: 50, height: 50)
                         
-                        Image(systemName: "cabinet.fill")
+                        Image(systemName: "archivebox.fill")
                             .font(.system(size: 22, weight: .medium))
-                            .foregroundColor(Color.bwPrimary)
+                            .foregroundColor(Color.bwPantryBrown)
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
@@ -620,7 +623,7 @@ struct DashboardView: View {
                                 Text("Updated \(timeAgo)")
                                     .font(BWTypography.captionSmall)
                             }
-                            .foregroundColor(Color.bwPrimary.opacity(0.8))
+                            .foregroundColor(Color.bwPantryBrown.opacity(0.8))
                         } else {
                             Text("Tap to manage")
                                 .font(BWTypography.captionSmall)
@@ -645,9 +648,9 @@ struct DashboardView: View {
                         .padding(.vertical, 10)
                         .background(
                             Capsule()
-                                .fill(Color.bwPrimary)
+                                .fill(Color.bwPantryBrown)
                         )
-                        .shadow(color: Color.bwPrimary.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.bwPantryBrown.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                     .buttonStyle(.bwPressable)
                 }
@@ -679,7 +682,7 @@ struct DashboardView: View {
                     }) {
                         Text("View All")
                             .font(BWTypography.buttonSmall)
-                            .foregroundColor(Color.bwAccentBlue)
+                            .foregroundColor(Color.bwFridgeBlue)
                     }
                 }
             }
@@ -693,16 +696,16 @@ struct DashboardView: View {
                         Circle()
                             .fill(
                                 LinearGradient(
-                                    colors: [Color.bwAccentBlue.opacity(0.15), Color.bwAccentBlue.opacity(0.05)],
+                                    colors: [Color.bwFridgeBlue.opacity(0.2), Color.bwFridgeBlue.opacity(0.08)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
                             .frame(width: 50, height: 50)
                         
-                        Image(systemName: "refrigerator.fill")
+                        Image(systemName: "snowflake")
                             .font(.system(size: 22, weight: .medium))
-                            .foregroundColor(Color.bwAccentBlue)
+                            .foregroundColor(Color.bwFridgeBlue)
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
@@ -719,7 +722,7 @@ struct DashboardView: View {
                                     Text("Scanned \(timeAgo)")
                                         .font(BWTypography.captionSmall)
                                 }
-                                .foregroundColor(Color.bwAccentBlue.opacity(0.8))
+                                .foregroundColor(Color.bwFridgeBlue.opacity(0.8))
                             }
                         } else {
                             Text("No items scanned")
@@ -751,9 +754,9 @@ struct DashboardView: View {
                         .padding(.vertical, 10)
                         .background(
                             Capsule()
-                                .fill(Color.bwAccentBlue)
+                                .fill(Color.bwFridgeBlue)
                         )
-                        .shadow(color: Color.bwAccentBlue.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.bwFridgeBlue.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                     .buttonStyle(.bwPressable)
                 }
@@ -832,15 +835,22 @@ struct DashboardView: View {
                 // Calories card with animated progress
                 Button(action: {
                     BWHaptics.lightImpact()
-                    navigationState.navigateTo(.dailyMacroGoals)
+                    if caloriesConsumed == 0 {
+                        // Show log action for empty state
+                        showingLogBreakfastSheet = true
+                    } else {
+                        navigationState.navigateTo(.dailyMacroGoals)
+                    }
                 }) {
-                    macroCardView(
+                    macroCardViewWithCTA(
                         title: "Calories",
                         value: "\(caloriesConsumed)",
                         goal: "of \(calorieGoal)",
                         progress: calorieProgress,
                         icon: "flame.fill",
-                        color: Color.bwAccent
+                        color: Color.red.opacity(0.8),
+                        ctaText: caloriesConsumed == 0 ? "Log Breakfast" : nil,
+                        ctaIcon: caloriesConsumed == 0 ? "plus.circle" : nil
                     )
                 }
                 .buttonStyle(.bwPressable)
@@ -848,21 +858,34 @@ struct DashboardView: View {
                 // Protein card with animated progress
                 Button(action: {
                     BWHaptics.lightImpact()
-                    navigationState.navigateTo(.dailyMacroGoals)
+                    if proteinConsumed == 0 {
+                        // Navigate to scan for empty state
+                        navigationState.navigateTo(.photoUpload)
+                    } else {
+                        navigationState.navigateTo(.dailyMacroGoals)
+                    }
                 }) {
-                    macroCardView(
+                    macroCardViewWithCTA(
                         title: "Protein",
                         value: "\(proteinConsumed)g",
                         goal: "of \(proteinGoalGrams)g",
                         progress: proteinProgress,
                         icon: "leaf.fill",
-                        color: Color.bwPrimary
+                        color: Color.green.opacity(0.8),
+                        ctaText: proteinConsumed == 0 ? "Scan Lunch" : nil,
+                        ctaIcon: proteinConsumed == 0 ? "camera.fill" : nil
                     )
                 }
                 .buttonStyle(.bwPressable)
             }
         }
         .bwCardStyle(padding: 14, cornerRadius: 16)
+        .sheet(isPresented: $showingLogBreakfastSheet) {
+            LogBreakfastSheet(isPresented: $showingLogBreakfastSheet)
+                .environmentObject(navigationState)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
     
     private func macroCardView(title: String, value: String, goal: String, progress: Double, icon: String, color: Color) -> some View {
@@ -896,6 +919,84 @@ struct DashboardView: View {
                 Text(goal)
                     .font(BWTypography.captionSmall)
                     .foregroundColor(.white.opacity(0.7))
+            }
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(
+                    LinearGradient(
+                        colors: [color, color.opacity(0.85)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+    }
+    
+    /// Macro card view with optional CTA for empty states
+    private func macroCardViewWithCTA(
+        title: String,
+        value: String,
+        goal: String,
+        progress: Double,
+        icon: String,
+        color: Color,
+        ctaText: String? = nil,
+        ctaIcon: String? = nil
+    ) -> some View {
+        VStack(spacing: 10) {
+            // Animated circular progress ring with icon
+            ZStack {
+                CircularProgressRing(
+                    progress: progress,
+                    lineWidth: 6,
+                    backgroundColor: Color.white.opacity(0.25),
+                    foregroundColor: .white,
+                    animateOnAppear: true
+                )
+                .frame(width: 50, height: 50)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(BWTypography.captionSmall)
+                    .foregroundColor(.white.opacity(0.9))
+                
+                Text(value)
+                    .font(BWTypography.bodyPrimary)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                
+                Text(goal)
+                    .font(BWTypography.captionSmall)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            
+            // CTA for empty state
+            if let ctaText = ctaText {
+                HStack(spacing: 4) {
+                    if let ctaIcon = ctaIcon {
+                        Image(systemName: ctaIcon)
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    Text(ctaText)
+                        .font(BWTypography.captionSmall)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(Color.white.opacity(0.25))
+                )
             }
         }
         .padding(.vertical, 14)
@@ -1127,6 +1228,241 @@ struct DashboardView: View {
         // Only show if we have usage data to analyze
         // Currently hidden as there's no usage tracking system
         EmptyView()
+    }
+}
+
+// MARK: - Log Breakfast Sheet (Instant Recipes)
+/// Sheet showing instant recipe suggestions based on available fridge + pantry items
+struct LogBreakfastSheet: View {
+    @Binding var isPresented: Bool
+    @EnvironmentObject private var navigationState: AppNavigationState
+    @ObservedObject private var dataManager = DataManager.shared
+    @State private var selectedRecipe: Recipe?
+    
+    // Generate instant recipe suggestions based on available ingredients
+    private var instantRecipes: [Recipe] {
+        // Get available ingredient names
+        let fridgeNames = dataManager.fridgeItems.map { $0.name.lowercased() }
+        let pantryNames = dataManager.pantryItems.map { $0.name.lowercased() }
+        let availableIngredients = Set(fridgeNames + pantryNames)
+        
+        // Filter dummy recipes that can be made with available ingredients
+        // Return recipes where at least 60% of main ingredients are available
+        let suggestedRecipes = Recipe.dummyData.filter { recipe in
+            let recipeIngredients = recipe.ingredients.compactMap { ing -> String? in
+                // Parse the ingredient name from the full string
+                let words = ing.lowercased()
+                    .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                    .filter { !$0.isEmpty && $0.count > 2 }
+                return words.first
+            }
+            
+            let matchCount = recipeIngredients.filter { ingredient in
+                availableIngredients.contains { available in
+                    available.contains(ingredient) || ingredient.contains(available)
+                }
+            }.count
+            
+            // Need at least 2 matching ingredients or 50% match
+            let matchRatio = recipeIngredients.isEmpty ? 0 : Double(matchCount) / Double(recipeIngredients.count)
+            return matchCount >= 2 || matchRatio >= 0.5
+        }
+        
+        // If no matching recipes, return first 3 dummy recipes
+        return suggestedRecipes.isEmpty ? Array(Recipe.dummyData.prefix(3)) : Array(suggestedRecipes.prefix(4))
+    }
+    
+    // Determine recipe color based on index
+    private func colorForRecipe(at index: Int) -> Color {
+        let colors: [Color] = [Color.bwPrimary, Color.bwAccent, Color.bwProtein, Color.bwCarbs]
+        return colors[index % colors.count]
+    }
+    
+    // Determine recipe icon based on recipe title
+    private func iconForRecipe(_ recipe: Recipe) -> String {
+        let title = recipe.title.lowercased()
+        if title.contains("salad") || title.contains("vegetable") {
+            return "leaf.fill"
+        } else if title.contains("chicken") || title.contains("stir fry") {
+            return "flame.fill"
+        } else if title.contains("pasta") || title.contains("risotto") {
+            return "fork.knife"
+        } else if title.contains("omelet") || title.contains("egg") || title.contains("breakfast") {
+            return "sun.max.fill"
+        } else if title.contains("yogurt") || title.contains("parfait") {
+            return "cup.and.saucer.fill"
+        }
+        return "fork.knife"
+    }
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Header
+                VStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.bwPrimary, Color.bwSecondary],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 56, height: 56)
+                        
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    
+                    Text("Instant Recipes")
+                        .font(BWTypography.sectionHeader)
+                    
+                    Text("Quick recipes based on your fridge & pantry")
+                        .font(BWTypography.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 8)
+                
+                // Instant recipe suggestions
+                VStack(spacing: 12) {
+                    ForEach(Array(instantRecipes.enumerated()), id: \.element.id) { index, recipe in
+                        Button(action: {
+                            BWHaptics.lightImpact()
+                            selectedRecipe = recipe
+                        }) {
+                            HStack(spacing: 14) {
+                                // Recipe icon
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [colorForRecipe(at: index).opacity(0.2), colorForRecipe(at: index).opacity(0.1)],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                        .frame(width: 56, height: 56)
+                                    
+                                    Image(systemName: iconForRecipe(recipe))
+                                        .font(.system(size: 22, weight: .medium))
+                                        .foregroundColor(colorForRecipe(at: index))
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(recipe.title)
+                                        .font(BWTypography.bodyPrimary)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                    
+                                    HStack(spacing: 12) {
+                                        // Time
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "clock")
+                                                .font(.system(size: 10))
+                                            Text("\(recipe.prepTime + recipe.cookTime) min")
+                                                .font(BWTypography.captionSmall)
+                                        }
+                                        .foregroundColor(.secondary)
+                                        
+                                        // Calories
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "flame.fill")
+                                                .font(.system(size: 10))
+                                            Text("\(recipe.macros.calories) cal")
+                                                .font(BWTypography.captionSmall)
+                                        }
+                                        .foregroundColor(Color.red.opacity(0.8))
+                                        
+                                        // Protein
+                                        HStack(spacing: 4) {
+                                            Text("P:")
+                                                .font(.system(size: 10, weight: .semibold))
+                                            Text("\(Int(recipe.macros.protein))g")
+                                                .font(BWTypography.captionSmall)
+                                        }
+                                        .foregroundColor(Color.green.opacity(0.8))
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.gray.opacity(0.5))
+                            }
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.white)
+                                    .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+                            )
+                        }
+                        .buttonStyle(.bwPressable)
+                    }
+                }
+                
+                // Ingredient summary
+                if !dataManager.fridgeItems.isEmpty || !dataManager.pantryItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Available Ingredients")
+                            .font(BWTypography.captionSmall)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        Text(availableIngredientsText)
+                            .font(BWTypography.captionSmall)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.bwPrimary.opacity(0.05))
+                    )
+                }
+                
+                // Cancel button
+                Button(action: {
+                    BWHaptics.lightImpact()
+                    isPresented = false
+                }) {
+                    Text("Close")
+                        .font(BWTypography.buttonSmall)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 8)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+        }
+        .background(Color.bwBackgroundCream.ignoresSafeArea())
+        .sheet(item: $selectedRecipe) { recipeToShow in
+            NavigationStack {
+                RecipeDetailScreen(recipe: recipeToShow, onFeedback: {})
+            }
+        }
+    }
+    
+    private var availableIngredientsText: String {
+        let fridgeNames = dataManager.fridgeItems.prefix(3).map { $0.name }
+        let pantryNames = dataManager.pantryItems.prefix(3).map { $0.name }
+        let combined = (fridgeNames + pantryNames).prefix(6)
+        let moreCount = dataManager.fridgeItems.count + dataManager.pantryItems.count - combined.count
+        
+        if combined.isEmpty {
+            return "No ingredients available"
+        }
+        
+        var text = combined.joined(separator: ", ")
+        if moreCount > 0 {
+            text += " +\(moreCount) more"
+        }
+        return text
     }
 }
 

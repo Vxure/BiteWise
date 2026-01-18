@@ -13,6 +13,8 @@ struct RecipeDetailScreen: View {
     var onFeedback: () -> Void
     @State private var userRating: Int = 0
     @State private var showingAIAssistant: Bool = false
+    @State private var showingDeductionAlert: Bool = false
+    @State private var deductedItems: [String] = []
     @ObservedObject private var dataManager = DataManager.shared
     @Environment(\.dismiss) private var dismiss
     
@@ -163,19 +165,21 @@ struct RecipeDetailScreen: View {
                             
                             Spacer()
                             
+                            // Calories badge with pastel red/pink
                             HStack(spacing: 4) {
                                 Image(systemName: "flame.fill")
                                     .font(.system(size: 11))
-                                    .foregroundColor(Color.bwCalories)
+                                    .foregroundColor(Color.red.opacity(0.8))
                                 Text("\(recipe.macros.calories)cal")
                                     .font(BWTypography.captionSmall)
                                     .fontWeight(.semibold)
+                                    .foregroundColor(Color.red.opacity(0.8))
                             }
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                             .padding(.vertical, 5)
                             .padding(.horizontal, 10)
-                            .background(Color.bwCalories.opacity(0.15))
+                            .background(Color.red.opacity(0.15))
                             .cornerRadius(8)
                         }
                     }
@@ -265,7 +269,16 @@ struct RecipeDetailScreen: View {
                     // Mark as cooked button
                     Button(action: {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            dataManager.toggleCooked(recipe)
+                            if !isMarkedAsCooked {
+                                // Mark as cooked and deduct ingredients
+                                dataManager.markAsCooked(recipe)
+                                deductedItems = dataManager.deductIngredients(for: recipe)
+                                BWHaptics.success()
+                                showingDeductionAlert = true
+                            } else {
+                                // Just unmark as cooked (don't restore ingredients)
+                                dataManager.unmarkAsCooked(recipe)
+                            }
                         }
                     }) {
                         HStack {
@@ -369,11 +382,20 @@ struct RecipeDetailScreen: View {
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
         }
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(isPresented: $showingAIAssistant) {
             // Go directly to ChatbotScreen with recipe context (skip intro)
             ChatbotScreen(recipe: recipe) {
                 showingAIAssistant = false
+            }
+        }
+        .alert("Ingredients Removed", isPresented: $showingDeductionAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            if deductedItems.isEmpty {
+                Text("Recipe marked as cooked! No matching ingredients were found in your inventory.")
+            } else {
+                Text("Recipe marked as cooked!\n\nRemoved from pantry:\n\(deductedItems.joined(separator: ", "))")
             }
         }
         .onAppear {

@@ -29,6 +29,9 @@ struct RecipeAIIntroView: View {
     // Scroll tracking
     @State private var scrollProxy: ScrollViewProxy?
     
+    // Navigation states
+    @State private var selectedRecipeForNavigation: Recipe?
+    
     // Header configuration
     private let headerHeight: CGFloat = 56
     
@@ -73,6 +76,9 @@ struct RecipeAIIntroView: View {
                         messages: sessionContext.activeChatSession?.messages ?? [],
                         isTyping: isTyping,
                         scrollProxy: $scrollProxy,
+                        onRecipeTap: { tappedRecipe in
+                            selectedRecipeForNavigation = tappedRecipe
+                        },
                         onDismissKeyboard: { isInputFocused = false }
                     )
                     .id(sessionContext.activeChatSession?.id) // Force refresh view when session changes
@@ -118,6 +124,11 @@ struct RecipeAIIntroView: View {
             )
         }
         .navigationBarHidden(true)
+        .sheet(item: $selectedRecipeForNavigation) { recipeToShow in
+            NavigationStack {
+                RecipeDetailScreen(recipe: recipeToShow, onFeedback: {})
+            }
+        }
         .onAppear {
             withAnimation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.2)) {
                 mascotScale = 1.0
@@ -159,6 +170,28 @@ struct RecipeAIIntroView: View {
         
         // Call Gemini API
         Task {
+            // DEMO TRIGGER: If user types "show recipe", show a dummy recipe card
+            if userText.lowercased().contains("show recipe") {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s delay
+                await MainActor.run {
+                    isTyping = false
+                    let botMessage = ChatMessage(text: "Here's a great recipe for you to try:", isUser: false)
+                    sessionContext.addMessageToActiveSession(botMessage)
+                    let recipeMessage = ChatMessage(recipe: Recipe.dummyData[0], isUser: false)
+                    sessionContext.addMessageToActiveSession(recipeMessage)
+                    
+                    // Scroll to new message
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if let lastMessage = sessionContext.activeChatSession?.messages.last {
+                            withAnimation {
+                                scrollProxy?.scrollTo(lastMessage.id, anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+                return
+            }
+            
             do {
                 let response = try await GeminiService.shared.chat(
                     message: userText,
@@ -292,11 +325,7 @@ private struct LandingContentView: View {
                 
                 // Greeting text
                 VStack(spacing: 8) {
-                    Text("How can I help you")
-                        .font(BWTypography.sectionHeader)
-                        .foregroundColor(.primary)
-                    
-                    Text("today?")
+                    Text("How can I help you today?")
                         .font(BWTypography.sectionHeader)
                         .foregroundColor(.primary)
                 }
@@ -413,6 +442,7 @@ private struct ChatMessagesView: View {
     let messages: [ChatMessage]
     let isTyping: Bool
     @Binding var scrollProxy: ScrollViewProxy?
+    var onRecipeTap: (Recipe) -> Void
     var onDismissKeyboard: () -> Void
     
     var body: some View {
@@ -420,8 +450,10 @@ private struct ChatMessagesView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(messages) { message in
-                        ChatBubble(message: message)
-                            .id(message.id)
+                        ChatBubble(message: message) { tappedRecipe in
+                            onRecipeTap(tappedRecipe)
+                        }
+                        .id(message.id)
                     }
                     
                     // Typing indicator

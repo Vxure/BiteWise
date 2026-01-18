@@ -16,6 +16,7 @@ struct DetectedIngredientsScreen: View {
     @State private var newIngredientName = ""
     @ObservedObject private var sessionContext = SessionContext.shared
     @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var appSettings = AppSettings.shared
     
     // Scroll tracking state for fading header
     @State private var scrollOffset: CGFloat = 0
@@ -208,7 +209,7 @@ struct DetectedIngredientsScreen: View {
                     showingScanModeSheet = false
                 }
             )
-            .presentationDetents([.height(580)])
+            .presentationDetents([.height(650), .large])
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingDuplicateSheet) {
@@ -310,14 +311,52 @@ struct DetectedIngredientsScreen: View {
             )
         }
         
-        // Check if fridge already has items - if so, show scan mode selection
+        // Check if fridge already has items - if so, check default scan behavior
         if dataManager.hasFridgeItems {
             pendingFridgeItems = fridgeItems
-            showingScanModeSheet = true
+            
+            // Check user's default scan preference
+            let defaultMethod = appSettings.defaultScanMethod
+            
+            if defaultMethod == .askEveryTime {
+                // Show the modal as usual
+                showingScanModeSheet = true
+            } else {
+                // Apply the default method directly without showing modal
+                selectedScanMode = defaultMethod
+                applyMergeMode(defaultMethod)
+            }
         } else {
             // First scan - just add directly
             dataManager.replaceFridgeItems(with: fridgeItems)
             onContinue()
+        }
+    }
+    
+    /// Apply the selected merge mode directly (used when skipping modal)
+    private func applyMergeMode(_ mode: ScanMergeMode) {
+        switch mode {
+        case .askEveryTime:
+            // Should not happen, but handle gracefully
+            showingScanModeSheet = true
+            
+        case .replace:
+            dataManager.replaceFridgeItems(with: pendingFridgeItems)
+            onContinue()
+            
+        case .add:
+            dataManager.addFridgeItems(pendingFridgeItems)
+            onContinue()
+            
+        case .smartMerge:
+            let duplicates = dataManager.findDuplicates(newItems: pendingFridgeItems)
+            if duplicates.isEmpty {
+                dataManager.addFridgeItems(pendingFridgeItems)
+                onContinue()
+            } else {
+                duplicatesToResolve = duplicates
+                showingDuplicateSheet = true
+            }
         }
     }
     
@@ -326,6 +365,11 @@ struct DetectedIngredientsScreen: View {
         showingScanModeSheet = false
         
         switch selectedScanMode {
+        case .askEveryTime:
+            // This case won't occur since the sheet only shows merge mode options
+            // But handle gracefully by showing the sheet again
+            showingScanModeSheet = true
+            
         case .replace:
             // Replace all existing items with new scan
             dataManager.replaceFridgeItems(with: pendingFridgeItems)

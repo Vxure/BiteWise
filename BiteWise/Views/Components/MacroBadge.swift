@@ -7,21 +7,25 @@ struct MacroBadge: View {
     let type: MacroType
     
     enum MacroType {
-        case protein, carbs, fats
+        case protein, carbs, fats, calories
         
+        /// Pastel color for the macro type (used for text and icons)
         var color: Color {
             switch self {
-            case .protein: return Color.bwProtein
-            case .carbs: return Color.bwCarbs
-            case .fats: return Color.bwFats
+            case .protein: return Color.green.opacity(0.8)    // Pastel green
+            case .carbs: return Color.blue.opacity(0.8)       // Pastel blue
+            case .fats: return Color.orange.opacity(0.8)      // Pastel yellow/orange
+            case .calories: return Color.red.opacity(0.8)     // Pastel red/pink
             }
         }
         
+        /// Background color for the badge
         var backgroundColor: Color {
             switch self {
-            case .protein: return Color.bwProtein.opacity(0.12)
-            case .carbs: return Color.bwCarbs.opacity(0.12)
-            case .fats: return Color.bwFats.opacity(0.12)
+            case .protein: return Color.green.opacity(0.15)
+            case .carbs: return Color.blue.opacity(0.15)
+            case .fats: return Color.orange.opacity(0.15)
+            case .calories: return Color.red.opacity(0.15)
             }
         }
         
@@ -30,6 +34,7 @@ struct MacroBadge: View {
             case .protein: return "leaf.fill"
             case .carbs: return "bolt.fill"
             case .fats: return "drop.fill"
+            case .calories: return "flame.fill"
             }
         }
     }
@@ -143,9 +148,10 @@ struct GradientMacroBadge: View {
     
     private var gradientColors: [Color] {
         switch type {
-        case .protein: return [Color.bwProtein, Color.bwProtein.opacity(0.7)]
-        case .carbs: return [Color.bwCarbs, Color.bwCarbs.opacity(0.7)]
-        case .fats: return [Color.bwFats, Color.bwFats.opacity(0.7)]
+        case .protein: return [Color.green.opacity(0.8), Color.green.opacity(0.6)]
+        case .carbs: return [Color.blue.opacity(0.8), Color.blue.opacity(0.6)]
+        case .fats: return [Color.orange.opacity(0.8), Color.orange.opacity(0.6)]
+        case .calories: return [Color.red.opacity(0.8), Color.red.opacity(0.6)]
         }
     }
     

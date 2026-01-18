@@ -168,18 +168,16 @@ struct PantryItemsScreen: View {
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
             
-            // Floating action button
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    addMoreButton
-                        .allowsHitTesting(true)
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 90)
+            // Expandable Floating Action Button
+            ExpandableFAB(
+                accentColor: .bwPrimary,
+                onScan: {
+                    navigationState.navigateTo(.photoUpload)
+                },
+                onManual: {
+                    showingAddItemSheet = true
                 }
-            }
-            .allowsHitTesting(false)
+            )
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showingAddItemSheet) {
@@ -298,36 +296,6 @@ struct PantryItemsScreen: View {
         }
     }
     
-    // MARK: - Add More Button
-    private var addMoreButton: some View {
-        Button(action: {
-            BWHaptics.mediumImpact()
-            showingAddItemSheet = true
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .semibold))
-                Text("Add")
-                    .font(BWTypography.buttonSmall)
-                    .fontWeight(.semibold)
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.bwPrimary, Color.bwPrimary.opacity(0.85)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .shadow(color: Color.bwPrimary.opacity(0.4), radius: 12, x: 0, y: 6)
-        }
-        .buttonStyle(.bwPressable)
-    }
 }
 
 // MARK: - Pantry Item Row
@@ -561,7 +529,7 @@ struct AddPantryItemSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium])
         .onAppear {
             isInputFocused = true
         }
@@ -576,8 +544,10 @@ struct AddPantryItemSheet: View {
     private func addItem() {
         guard !itemName.isEmpty else { return }
         
+        // Pantry items are staples by default - they won't be deducted when cooking
         let newItem = Ingredient(
-            name: itemName.trimmingCharacters(in: .whitespacesAndNewlines)
+            name: itemName.trimmingCharacters(in: .whitespacesAndNewlines),
+            isStaple: true
         )
         
         dataManager.addPantryItem(newItem)
@@ -586,7 +556,8 @@ struct AddPantryItemSheet: View {
     }
     
     private func addQuickItem(_ name: String) {
-        let newItem = Ingredient(name: name)
+        // Pantry items are staples by default
+        let newItem = Ingredient(name: name, isStaple: true)
         dataManager.addPantryItem(newItem)
         BWHaptics.success()
     }

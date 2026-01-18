@@ -342,8 +342,8 @@ struct PantrySetupScreen: View {
     
     /// Save pantry items to DataManager and continue
     private func saveAndContinue() {
-        // Convert selected items to Ingredient objects
-        let ingredients = selectedItems.map { Ingredient(name: $0) }
+        // Convert selected items to Ingredient objects - pantry items are staples by default
+        let ingredients = selectedItems.map { Ingredient(name: $0, isStaple: true) }
         dataManager.pantryItems = ingredients
         dataManager.savePantryItems()
         onContinue()

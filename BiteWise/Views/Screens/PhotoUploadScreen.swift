@@ -171,7 +171,7 @@ struct PhotoUploadScreen: View {
                         .staggeredAppear(index: 4)
                     
                     Spacer()
-                        .frame(height: -100)
+                        .frame(height: 80)
 
                 }
             }

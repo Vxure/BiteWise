@@ -502,6 +502,17 @@ struct SettingsView: View {
                         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
                     }
                     
+                    // Scan Settings
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Scan")
+                            .font(.bwCaption())
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                            .padding(.leading, 4)
+                        
+                        ScanSettingsCard()
+                    }
+                    
                     // Fridge Settings
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Fridge")
@@ -554,6 +565,121 @@ struct SettingsView: View {
                 .padding(.bottom, 100)
             }
         }
+    }
+}
+
+// Scan Settings Card
+struct ScanSettingsCard: View {
+    @ObservedObject private var appSettings = AppSettings.shared
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header with expand/collapse
+            Button(action: {
+                BWHaptics.lightImpact()
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.bwAccentBlue.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color.bwAccentBlue)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Default Scan Behavior")
+                            .font(.bwBody())
+                            .foregroundColor(.primary)
+                        
+                        Text(appSettings.defaultScanMethod.rawValue)
+                            .font(.bwCaption())
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.gray.opacity(0.5))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            // Expanded options
+            if isExpanded {
+                Divider()
+                    .padding(.leading, 66)
+                
+                VStack(spacing: 0) {
+                    ForEach(ScanMergeMode.allCases, id: \.self) { mode in
+                        Button(action: {
+                            BWHaptics.selection()
+                            withAnimation(.bwSnappy) {
+                                appSettings.defaultScanMethod = mode
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: mode.icon)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(appSettings.defaultScanMethod == mode ? Color.bwPrimary : .secondary)
+                                    .frame(width: 24)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(mode.rawValue)
+                                        .font(BWTypography.bodyPrimary)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text(mode.description)
+                                        .font(BWTypography.captionSmall)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                if appSettings.defaultScanMethod == mode {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(Color.bwPrimary)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                            .background(
+                                appSettings.defaultScanMethod == mode ? Color.bwPrimary.opacity(0.06) : Color.clear
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        
+                        if mode != ScanMergeMode.allCases.last {
+                            Divider()
+                                .padding(.leading, 52)
+                        }
+                    }
+                }
+            }
+        }
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(0.5))
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
     }
 }
 

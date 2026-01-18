@@ -5,6 +5,8 @@ struct ScanModeSheet: View {
     let existingItemCount: Int
     let newItemCount: Int
     @Binding var selectedMode: ScanMergeMode
+    @State private var rememberChoice: Bool = false
+    @ObservedObject private var appSettings = AppSettings.shared
     var onContinue: () -> Void
     var onCancel: () -> Void
     
@@ -41,7 +43,7 @@ struct ScanModeSheet: View {
             
             // Mode options
             VStack(spacing: 12) {
-                ForEach(ScanMergeMode.allCases, id: \.self) { mode in
+                ForEach(ScanMergeMode.mergeModes, id: \.self) { mode in
                     ScanModeOptionRow(
                         mode: mode,
                         isSelected: selectedMode == mode,
@@ -55,6 +57,40 @@ struct ScanModeSheet: View {
                 }
             }
             
+            // Remember my choice toggle
+            Button(action: {
+                BWHaptics.selection()
+                withAnimation(.bwSnappy) {
+                    rememberChoice.toggle()
+                }
+            }) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(rememberChoice ? Color.bwPrimary : Color.clear)
+                            .frame(width: 24, height: 24)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(rememberChoice ? Color.bwPrimary : Color.gray.opacity(0.4), lineWidth: 2)
+                            )
+                        
+                        if rememberChoice {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    
+                    Text("Remember my choice")
+                        .font(BWTypography.bodyPrimary)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
+            }
+            .buttonStyle(.plain)
+            
             // Action buttons
             VStack(spacing: 12) {
                 GradientButton(
@@ -62,6 +98,10 @@ struct ScanModeSheet: View {
                     text: "Continue",
                     action: {
                         BWHaptics.success()
+                        // Save preference if remember is checked
+                        if rememberChoice {
+                            appSettings.defaultScanMethod = selectedMode
+                        }
                         onContinue()
                     }
                 )

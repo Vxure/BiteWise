@@ -286,10 +286,10 @@ private struct SessionRow: View {
                 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(session.title)
-                        .font(BWTypography.bodyPrimary)
-                        .fontWeight(isActive ? .semibold : .regular)
+                        .font(BWTypography.caption)
+                        .fontWeight(isActive ? .semibold : .medium)
                         .foregroundColor(.primary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                     
                     Text(session.timeAgo)
                         .font(BWTypography.captionSmall)

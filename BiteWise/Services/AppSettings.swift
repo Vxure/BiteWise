@@ -19,6 +19,9 @@ class AppSettings: ObservableObject {
     private let recipeChatExpireDaysKey = "recipeChatExpireDays"
     private let keepRecipeChatsLongerKey = "keepRecipeChatsLonger"
     
+    // Scan behavior key
+    private let defaultScanMethodKey = "defaultScanMethod"
+    
     // MARK: - Published Properties
     
     /// When true, ALL API calls are bypassed and dummy data is used instead
@@ -75,6 +78,14 @@ class AppSettings: ObservableObject {
         }
     }
     
+    /// Default scan method for handling inventory updates
+    /// Options: askEveryTime (default), smartMerge, add, replace
+    @Published var defaultScanMethod: ScanMergeMode {
+        didSet {
+            UserDefaults.standard.set(defaultScanMethod.rawValue, forKey: defaultScanMethodKey)
+        }
+    }
+    
     // MARK: - Initialization
     
     private init() {
@@ -116,6 +127,14 @@ class AppSettings: ObservableObject {
         self.recipeChatExpireDays = savedRecipeChatDays > 0 ? savedRecipeChatDays : defaultRecipeDays
         
         self.keepRecipeChatsLonger = UserDefaults.standard.bool(forKey: keepRecipeChatsLongerKey)
+        
+        // Load default scan method
+        if let savedScanMethod = UserDefaults.standard.string(forKey: defaultScanMethodKey),
+           let scanMode = ScanMergeMode(rawValue: savedScanMethod) {
+            self.defaultScanMethod = scanMode
+        } else {
+            self.defaultScanMethod = .askEveryTime // Default to asking every time
+        }
     }
     
     // MARK: - Computed Properties

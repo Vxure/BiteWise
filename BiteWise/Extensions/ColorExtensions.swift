@@ -70,6 +70,10 @@ public extension Color {
     static let bwSuccess = Color(hex: "40916C")           // Green success
     static let bwWarning = Color(hex: "E9C46A")           // Golden warning
     static let bwError = Color(hex: "E76F51")             // Terracotta error
+    
+    // Fridge & Pantry distinct colors
+    static let bwFridgeBlue = Color(hex: "5B9BD5")        // Cool blue for fridge
+    static let bwPantryBrown = Color(hex: "A67C52")       // Warm brown for pantry
 }
 
 // MARK: - BiteWise Theme Gradients
