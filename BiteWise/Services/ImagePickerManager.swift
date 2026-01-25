@@ -87,6 +87,7 @@ struct PhotoLibraryPicker: View {
 struct ImageSourceSheet: View {
     @Binding var isPresented: Bool
     @Binding var selectedImage: UIImage?
+    @Environment(\.colorScheme) var colorScheme
     
     @State private var showCamera = false
     @State private var showPhotoLibrary = false
@@ -107,12 +108,12 @@ struct ImageSourceSheet: View {
                         HStack(spacing: 16) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.bwPrimaryCoral.opacity(0.15))
+                                    .fill(Color.bwAdaptivePrimaryCoral(for: colorScheme).opacity(0.15))
                                     .frame(width: 50, height: 50)
                                 
                                 Image(systemName: "camera.fill")
                                     .font(.system(size: 22))
-                                    .foregroundColor(Color.bwPrimaryCoral)
+                                    .foregroundColor(Color.bwAdaptivePrimaryCoral(for: colorScheme))
                             }
                             
                             VStack(alignment: .leading, spacing: 4) {
@@ -128,14 +129,14 @@ struct ImageSourceSheet: View {
                             Spacer()
                             
                             Image(systemName: "chevron.right")
-                                .foregroundColor(.gray)
+                                .foregroundColor(.secondary)
                         }
                         .padding(16)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+                                .fill(Color(.secondarySystemBackground))
                         )
+                        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
                     }
                     .buttonStyle(.plain)
                 }
@@ -149,12 +150,12 @@ struct ImageSourceSheet: View {
                     HStack(spacing: 16) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.bwAccentBlue.opacity(0.15))
+                                .fill(Color.bwAdaptiveAccentBlue(for: colorScheme).opacity(0.15))
                                 .frame(width: 50, height: 50)
                             
                             Image(systemName: "photo.on.rectangle")
                                 .font(.system(size: 22))
-                                .foregroundColor(Color.bwAccentBlue)
+                                .foregroundColor(Color.bwAdaptiveAccentBlue(for: colorScheme))
                         }
                         
                         VStack(alignment: .leading, spacing: 4) {
@@ -170,13 +171,14 @@ struct ImageSourceSheet: View {
                         Spacer()
                         
                         Image(systemName: "chevron.right")
-                            .foregroundColor(.gray)
+                            .foregroundColor(.secondary)
                     }
                     .padding(16)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.white)
-                            .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                    .adaptiveShadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4
                     )
                 }
                 .buttonStyle(.plain)

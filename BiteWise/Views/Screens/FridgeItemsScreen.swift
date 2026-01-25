@@ -13,6 +13,7 @@ struct FridgeItemsScreen: View {
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var appSettings = AppSettings.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
     @State private var showingAddItemSheet = false
     @State private var itemToDelete: FridgeItem?
     @State private var showingClearConfirmation = false
@@ -47,9 +48,15 @@ struct FridgeItemsScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -102,13 +109,13 @@ struct FridgeItemsScreen: View {
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color.white)
+                                .fill(Color(.secondarySystemBackground))
                                 .frame(width: 40, height: 40)
-                                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+                                .adaptiveShadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
                             
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(Color.bwAccentBlue)
+                                .foregroundColor(Color.bwAdaptiveFridgeBlue(for: colorScheme))
                         }
                     }
                     .buttonStyle(.bwPressable)
@@ -144,13 +151,13 @@ struct FridgeItemsScreen: View {
                         } label: {
                             ZStack {
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(Color(.secondarySystemBackground))
                                     .frame(width: 40, height: 40)
-                                    .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+                                    .adaptiveShadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
                                 
                                 Image(systemName: "ellipsis")
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(Color.bwAccentBlue)
+                                    .foregroundColor(Color.bwAdaptiveFridgeBlue(for: colorScheme))
                             }
                         }
                     } else {
@@ -163,18 +170,7 @@ struct FridgeItemsScreen: View {
                 .padding(.bottom, 16)
             }
             .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.bwGradientCream, location: 0),
-                        .init(color: Color.bwGradientCream, location: 0.6),
-                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
-                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
@@ -342,6 +338,7 @@ struct FridgeItemsScreen: View {
 struct FridgeItemRow: View {
     let item: FridgeItem
     let onDelete: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     @State private var offset: CGFloat = 0
     @State private var isSwiping = false
@@ -372,12 +369,12 @@ struct FridgeItemRow: View {
                 // Category icon
                 ZStack {
                     Circle()
-                        .fill(Color.bwAccentBlue.opacity(0.12))
+                        .fill(Color.bwAdaptiveFridgeBlue(for: colorScheme).opacity(0.12))
                         .frame(width: 44, height: 44)
                     
                     Image(systemName: item.categoryIcon)
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(Color.bwAccentBlue)
+                        .foregroundColor(Color.bwAdaptiveFridgeBlue(for: colorScheme))
                 }
                 
                 // Item info
@@ -401,7 +398,7 @@ struct FridgeItemRow: View {
                             Text(item.timeAgoString)
                                 .font(BWTypography.captionSmall)
                         }
-                        .foregroundColor(Color.bwAccentBlue.opacity(0.8))
+                        .foregroundColor(Color.bwAdaptiveFridgeBlue(for: colorScheme).opacity(0.8))
                     }
                 }
                 
@@ -410,15 +407,15 @@ struct FridgeItemRow: View {
                 // Swipe hint
                 Image(systemName: "chevron.left")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.gray.opacity(0.3))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
+                    .fill(Color(.secondarySystemBackground))
             )
+            .adaptiveShadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
             .offset(x: offset)
             .gesture(
                 DragGesture(minimumDistance: 15)
@@ -456,6 +453,7 @@ struct FridgeItemRow: View {
 struct AddFridgeItemSheet: View {
     @Binding var isPresented: Bool
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     @State private var itemName = ""
     @State private var quantity = ""
     @State private var selectedCategory = "other"
@@ -463,7 +461,7 @@ struct AddFridgeItemSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                BWGradients.backgroundGradient
+                Color(.systemBackground)
                     .ignoresSafeArea()
                 
                 VStack(alignment: .leading, spacing: 24) {
@@ -482,7 +480,7 @@ struct AddFridgeItemSheet: View {
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white)
+                                    .fill(Color(.secondarySystemBackground))
                             )
                     }
                     
@@ -497,7 +495,7 @@ struct AddFridgeItemSheet: View {
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white)
+                                    .fill(Color(.secondarySystemBackground))
                             )
                     }
                     
@@ -584,6 +582,7 @@ struct CategoryChip: View {
     let category: String
     let isSelected: Bool
     let onTap: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: onTap) {
@@ -595,11 +594,11 @@ struct CategoryChip: View {
                 .padding(.vertical, 10)
                 .background(
                     Capsule()
-                        .fill(isSelected ? Color.bwAccentBlue : Color.white)
+                        .fill(isSelected ? Color.bwAdaptiveFridgeBlue(for: colorScheme) : Color(.secondarySystemBackground))
                 )
                 .overlay(
                     Capsule()
-                        .stroke(isSelected ? Color.clear : Color.gray.opacity(0.2), lineWidth: 1)
+                        .stroke(isSelected ? Color.clear : Color.secondary.opacity(0.2), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)

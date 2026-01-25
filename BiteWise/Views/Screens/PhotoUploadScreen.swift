@@ -43,6 +43,7 @@ struct PhotoUploadScreen: View {
     @State private var selectedImage: UIImage?
     @State private var errorMessage: String?
     @ObservedObject private var sessionContext = SessionContext.shared
+    @Environment(\.colorScheme) var colorScheme
     var onContinue: () -> Void
     
     // Scroll tracking state for fading header
@@ -75,9 +76,15 @@ struct PhotoUploadScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 32) {
@@ -129,11 +136,11 @@ struct PhotoUploadScreen: View {
                         HStack(spacing: 12) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.bwPrimary.opacity(0.1))
+                                    .fill(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.1))
                                     .frame(width: 44, height: 44)
                                 Image(systemName: "pencil.line")
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(Color.bwPrimary)
+                                    .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                             }
                             
                             VStack(alignment: .leading, spacing: 2) {
@@ -150,14 +157,14 @@ struct PhotoUploadScreen: View {
                             
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.gray.opacity(0.5))
+                                .foregroundColor(.secondary)
                         }
                         .padding(15)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
+                                .fill(Color(.secondarySystemBackground))
                         )
+                        .adaptiveShadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
                     }
                     .buttonStyle(.bwPressable)
                     .padding(.horizontal, 20)
@@ -190,18 +197,7 @@ struct PhotoUploadScreen: View {
                     .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.bwGradientCream, location: 0),
-                        .init(color: Color.bwGradientCream, location: 0.6),
-                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
-                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
@@ -304,6 +300,7 @@ struct UploadBoxView: View {
     var onUpload: () -> Void
     @State private var isPressed = false
     @State private var animationAngle: Double = 0
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         ZStack {
@@ -312,18 +309,18 @@ struct UploadBoxView: View {
                 .fill(.ultraThinMaterial)
             
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.6))
+                .fill(colorScheme == .dark ? Color(.secondarySystemBackground) : Color.white.opacity(0.6))
             
             // Animated gradient border
             RoundedRectangle(cornerRadius: 20)
                 .stroke(
                     AngularGradient(
                         gradient: Gradient(colors: [
-                            Color.bwPrimaryCoral,
-                            Color.bwPrimaryOrange,
-                            Color.bwAccentGold,
-                            Color.bwPrimaryCoral.opacity(0.5),
-                            Color.bwPrimaryCoral
+                            Color.bwAdaptivePrimaryCoral(for: colorScheme),
+                            Color.bwAdaptivePrimaryOrange(for: colorScheme),
+                            Color.bwAdaptiveAccentGold(for: colorScheme),
+                            Color.bwAdaptivePrimaryCoral(for: colorScheme).opacity(0.5),
+                            Color.bwAdaptivePrimaryCoral(for: colorScheme)
                         ]),
                         center: .center,
                         angle: .degrees(animationAngle)
@@ -384,7 +381,7 @@ struct UploadBoxView: View {
         .frame(height: 320)
         .scaleEffect(isPressed && !isAnalyzing ? 0.98 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
-        .shadow(color: Color.bwPrimaryCoral.opacity(0.25), radius: 20, x: 0, y: 10)
+        .adaptiveShadow(color: Color.bwAdaptivePrimaryCoral(for: colorScheme).opacity(0.25), radius: 20, x: 0, y: 10)
         .contentShape(Rectangle())
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)

@@ -76,9 +76,112 @@ public extension Color {
     static let bwPantryBrown = Color(hex: "A67C52")       // Warm brown for pantry
 }
 
+// MARK: - Semantic System Colors (Dark Mode Adaptive)
+public extension Color {
+    /// Main background - pure black in dark mode, white in light mode
+    static var bwSystemBackground: Color { Color(.systemBackground) }
+    
+    /// Card/Surface background - elevated surface with subtle contrast
+    static var bwCardSurface: Color { Color(.secondarySystemBackground) }
+    
+    /// Tertiary/elevated surface for nested elements
+    static var bwElevatedSurface: Color { Color(.tertiarySystemBackground) }
+    
+    /// System grouped background for list-style interfaces
+    static var bwGroupedBackground: Color { Color(.systemGroupedBackground) }
+}
+
+// MARK: - Adaptive Accent Colors (Neon Pop for Dark Mode)
+public extension Color {
+    /// Adaptive primary green - brighter in dark mode for neon effect
+    static func bwAdaptivePrimary(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "4ADE80") : Color(hex: "2D6A4F")
+    }
+    
+    /// Adaptive secondary green
+    static func bwAdaptiveSecondary(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "6EE7A0") : Color(hex: "40916C")
+    }
+    
+    /// Adaptive accent terracotta - vibrant coral in dark mode
+    static func bwAdaptiveAccent(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "FF8A65") : Color(hex: "E76F51")
+    }
+    
+    /// Adaptive protein gold - brighter yellow in dark mode
+    static func bwAdaptiveProtein(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "FBBF24") : Color(hex: "E9C46A")
+    }
+    
+    /// Adaptive carbs peach - warmer orange in dark mode
+    static func bwAdaptiveCarbs(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "FB923C") : Color(hex: "F4A261")
+    }
+    
+    /// Adaptive fats teal - brighter cyan in dark mode
+    static func bwAdaptiveFats(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "22D3EE") : Color(hex: "264653")
+    }
+    
+    /// Adaptive calories red
+    static func bwAdaptiveCalories(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "F87171") : Color(hex: "E76F51")
+    }
+    
+    /// Adaptive fridge blue - brighter in dark mode
+    static func bwAdaptiveFridgeBlue(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "60A5FA") : Color(hex: "5B9BD5")
+    }
+    
+    /// Adaptive pantry brown - warmer in dark mode
+    static func bwAdaptivePantryBrown(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "D4A574") : Color(hex: "A67C52")
+    }
+    
+    /// Adaptive success green
+    static func bwAdaptiveSuccess(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "4ADE80") : Color(hex: "40916C")
+    }
+    
+    /// Adaptive warning gold
+    static func bwAdaptiveWarning(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "FBBF24") : Color(hex: "E9C46A")
+    }
+    
+    /// Adaptive error red
+    static func bwAdaptiveError(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "F87171") : Color(hex: "E76F51")
+    }
+    
+    /// Adaptive coral - vibrant coral in dark mode
+    static func bwAdaptivePrimaryCoral(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "FF8A65") : Color(hex: "E76F51")
+    }
+    
+    /// Adaptive orange/peach - brighter orange in dark mode
+    static func bwAdaptivePrimaryOrange(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "FB923C") : Color(hex: "F4A261")
+    }
+    
+    /// Adaptive gold - brighter yellow in dark mode
+    static func bwAdaptiveAccentGold(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "FBBF24") : Color(hex: "E9C46A")
+    }
+    
+    /// Adaptive green - brighter green in dark mode (maps to bwAccentGreen)
+    static func bwAdaptiveAccentGreen(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "4ADE80") : Color(hex: "2D6A4F")
+    }
+    
+    /// Adaptive blue - brighter blue in dark mode
+    static func bwAdaptiveAccentBlue(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(hex: "38BDF8") : Color(hex: "264653")
+    }
+}
+
 // MARK: - BiteWise Theme Gradients
 public struct BWGradients {
-    // Main background gradient - warm cream tones
+    // Main background gradient - warm cream tones (light mode only, use solid color in dark mode)
     static var backgroundGradient: LinearGradient {
         LinearGradient(
             colors: [
@@ -89,6 +192,19 @@ public struct BWGradients {
             startPoint: .top,
             endPoint: .bottom
         )
+    }
+    
+    /// Adaptive background gradient - cream in light mode, solid dark in dark mode
+    static func backgroundGradient(for scheme: ColorScheme) -> LinearGradient {
+        if scheme == .dark {
+            return LinearGradient(
+                colors: [Color(.systemBackground), Color(.systemBackground)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        } else {
+            return backgroundGradient
+        }
     }
     
     // Accent button gradient - terracotta to peach
@@ -103,6 +219,19 @@ public struct BWGradients {
         )
     }
     
+    /// Adaptive accent gradient - brighter in dark mode
+    static func accentGradient(for scheme: ColorScheme) -> LinearGradient {
+        if scheme == .dark {
+            return LinearGradient(
+                colors: [Color(hex: "FF8A65"), Color(hex: "FFAB91")],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        } else {
+            return accentGradient
+        }
+    }
+    
     // Primary gradient - forest green tones
     static var primaryGradient: LinearGradient {
         LinearGradient(
@@ -113,6 +242,19 @@ public struct BWGradients {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+    
+    /// Adaptive primary gradient - brighter greens in dark mode
+    static func primaryGradient(for scheme: ColorScheme) -> LinearGradient {
+        if scheme == .dark {
+            return LinearGradient(
+                colors: [Color(hex: "4ADE80"), Color(hex: "6EE7A0")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return primaryGradient
+        }
     }
     
     // Card subtle gradient overlay
@@ -127,6 +269,22 @@ public struct BWGradients {
         )
     }
     
+    /// Adaptive card gradient
+    static func cardGradient(for scheme: ColorScheme) -> LinearGradient {
+        if scheme == .dark {
+            return LinearGradient(
+                colors: [
+                    Color(.secondarySystemBackground),
+                    Color(.secondarySystemBackground)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return cardGradient
+        }
+    }
+    
     // Warm greeting card gradient
     static var greetingGradient: LinearGradient {
         LinearGradient(
@@ -138,10 +296,42 @@ public struct BWGradients {
             endPoint: .bottomTrailing
         )
     }
+    
+    /// Adaptive greeting gradient
+    static func greetingGradient(for scheme: ColorScheme) -> LinearGradient {
+        if scheme == .dark {
+            return LinearGradient(
+                colors: [
+                    Color(hex: "4ADE80").opacity(0.9),
+                    Color(hex: "6EE7A0").opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return greetingGradient
+        }
+    }
+    
+    /// Header fade gradient - fades from background to transparent
+    static func headerFadeGradient(for scheme: ColorScheme) -> LinearGradient {
+        let bgColor = scheme == .dark ? Color(.systemBackground) : Color.bwGradientCream
+        return LinearGradient(
+            stops: [
+                .init(color: bgColor, location: 0),
+                .init(color: bgColor, location: 0.6),
+                .init(color: bgColor.opacity(0.8), location: 0.75),
+                .init(color: bgColor.opacity(0), location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 }
 
-// MARK: - Enhanced Card Style Modifier (24pt corners, colored shadows)
+// MARK: - Enhanced Card Style Modifier (24pt corners, adaptive colors, conditional shadows)
 public struct BWCardStyle: ViewModifier {
+    @Environment(\.colorScheme) var colorScheme
     var padding: CGFloat = 20
     var cornerRadius: CGFloat = 24
     var shadowColor: Color = Color.black.opacity(0.08)
@@ -151,9 +341,19 @@ public struct BWCardStyle: ViewModifier {
             .padding(padding)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Color.white)
-                    .shadow(color: shadowColor.opacity(0.04), radius: 1, x: 0, y: 1)
-                    .shadow(color: shadowColor, radius: 16, x: 0, y: 8)
+                    .fill(Color(.secondarySystemBackground))
+                    .shadow(
+                        color: colorScheme == .dark ? .clear : shadowColor.opacity(0.04),
+                        radius: 1,
+                        x: 0,
+                        y: 1
+                    )
+                    .shadow(
+                        color: colorScheme == .dark ? .clear : shadowColor,
+                        radius: 16,
+                        x: 0,
+                        y: 8
+                    )
             )
     }
 }
@@ -168,13 +368,21 @@ public extension View {
     }
 }
 
-// MARK: - Background Modifier
+// MARK: - Background Modifier (Adaptive)
 public struct BWBackgroundStyle: ViewModifier {
+    @Environment(\.colorScheme) var colorScheme
+    
     public func body(content: Content) -> some View {
         content
             .background(
-                BWGradients.backgroundGradient
-                    .ignoresSafeArea()
+                Group {
+                    if colorScheme == .dark {
+                        Color(.systemBackground)
+                    } else {
+                        BWGradients.backgroundGradient
+                    }
+                }
+                .ignoresSafeArea()
             )
     }
 }
@@ -182,6 +390,33 @@ public struct BWBackgroundStyle: ViewModifier {
 public extension View {
     func bwBackground() -> some View {
         modifier(BWBackgroundStyle())
+    }
+}
+
+// MARK: - Adaptive Shadow Modifier
+/// Applies shadow only in light mode, removes in dark mode for cleaner look
+public struct AdaptiveShadowModifier: ViewModifier {
+    @Environment(\.colorScheme) var colorScheme
+    var color: Color
+    var radius: CGFloat
+    var x: CGFloat
+    var y: CGFloat
+    
+    public func body(content: Content) -> some View {
+        content
+            .shadow(
+                color: colorScheme == .dark ? .clear : color,
+                radius: radius,
+                x: x,
+                y: y
+            )
+    }
+}
+
+public extension View {
+    /// Applies shadow only in light mode
+    func adaptiveShadow(color: Color = Color.black.opacity(0.08), radius: CGFloat = 8, x: CGFloat = 0, y: CGFloat = 4) -> some View {
+        modifier(AdaptiveShadowModifier(color: color, radius: radius, x: x, y: y))
     }
 }
 

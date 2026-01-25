@@ -178,21 +178,7 @@ struct ComboCard: View {
                 }
                 
                 // Time Badge (Floating)
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock.fill")
-                            Text("10m")
-                        }
-                        .font(.caption2.bold())
-                        .padding(6)
-                        .background(.thinMaterial)
-                        .clipShape(Capsule())
-                        .padding(8)
-                    }
-                }
+                
             }
             .frame(height: 140)
             

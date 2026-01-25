@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CustomNavigationModifier: ViewModifier {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
     
     func body(content: Content) -> some View {
         content
@@ -15,13 +16,13 @@ struct CustomNavigationModifier: ViewModifier {
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color.white)
+                                .fill(Color(.secondarySystemBackground))
                                 .frame(width: 40, height: 40)
-                                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+                                .shadow(color: colorScheme == .dark ? Color.clear : Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
                             
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(Color.bwPrimary)
+                                .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                         }
                     }
                     .buttonStyle(.bwPressable)

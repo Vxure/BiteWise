@@ -17,6 +17,7 @@ struct RecipeDetailScreen: View {
     @State private var deductedItems: [String] = []
     @ObservedObject private var dataManager = DataManager.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
     
     // Scroll tracking state for fading header
     @State private var scrollOffset: CGFloat = 0
@@ -56,9 +57,15 @@ struct RecipeDetailScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -105,13 +112,13 @@ struct RecipeDetailScreen: View {
                         }) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(Color(.secondarySystemBackground))
                                     .frame(width: 44, height: 44)
-                                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                                    .adaptiveShadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                                 
                                 Image(systemName: isFavorite ? "star.fill" : "star")
                                     .font(.system(size: 20, weight: .medium))
-                                    .foregroundColor(Color.bwAccent)
+                                    .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
                                     .scaleEffect(isFavorite ? 1.1 : 1.0)
                             }
                         }
@@ -338,13 +345,13 @@ struct RecipeDetailScreen: View {
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color.white)
+                                .fill(Color(.secondarySystemBackground))
                                 .frame(width: 40, height: 40)
-                                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+                                .adaptiveShadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
                             
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(Color.bwPrimary)
+                                .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                         }
                     }
                     .buttonStyle(.bwPressable)
@@ -366,18 +373,7 @@ struct RecipeDetailScreen: View {
                 .padding(.bottom, 16)
             }
             .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.bwGradientCream, location: 0),
-                        .init(color: Color.bwGradientCream, location: 0.6),
-                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
-                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
@@ -395,7 +391,7 @@ struct RecipeDetailScreen: View {
             if deductedItems.isEmpty {
                 Text("Recipe marked as cooked! No matching ingredients were found in your inventory.")
             } else {
-                Text("Recipe marked as cooked!\n\nRemoved from pantry:\n\(deductedItems.joined(separator: ", "))")
+                Text("Recipe marked as cooked!\n\nRemoved from ingredients:\n\(deductedItems.joined(separator: ", "))")
             }
         }
         .onAppear {

@@ -7,6 +7,7 @@ struct UserProfileScreen: View {
     @State private var showMacroEditor = false
     @State private var isEditingName = false
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     @FocusState private var isPreferenceFocused: Bool
     @FocusState private var isAllergyFocused: Bool
     @FocusState private var isNameFocused: Bool
@@ -14,9 +15,15 @@ struct UserProfileScreen: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 20) {
@@ -119,12 +126,12 @@ struct UserProfileScreen: View {
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                                .fill(Color(.tertiarySystemBackground))
                         )
+                        .adaptiveShadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.bwPrimary.opacity(0.3), lineWidth: 1)
+                                .stroke(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.3), lineWidth: 1)
                         )
                 } else {
                     Text(profile.name)
@@ -225,12 +232,12 @@ struct UserProfileScreen: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                    .fill(Color(.tertiarySystemBackground))
             )
+            .adaptiveShadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(isPreferenceFocused ? Color.bwPrimary.opacity(0.5) : Color.clear, lineWidth: 2)
+                    .stroke(isPreferenceFocused ? Color.bwAdaptivePrimary(for: colorScheme).opacity(0.5) : Color.clear, lineWidth: 2)
             )
             .animation(.bwSnappy, value: isPreferenceFocused)
             .animation(.bwSnappy, value: newPreference.isEmpty)
@@ -336,12 +343,12 @@ struct UserProfileScreen: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                    .fill(Color(.tertiarySystemBackground))
             )
+            .adaptiveShadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(isAllergyFocused ? Color.bwAccent.opacity(0.5) : Color.clear, lineWidth: 2)
+                    .stroke(isAllergyFocused ? Color.bwAdaptiveAccent(for: colorScheme).opacity(0.5) : Color.clear, lineWidth: 2)
             )
             .animation(.bwSnappy, value: isAllergyFocused)
             .animation(.bwSnappy, value: newAllergy.isEmpty)
@@ -614,8 +621,8 @@ struct UserProfileScreen: View {
         .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.02))
-                .strokeBorder(Color.black.opacity(0.05), style: StrokeStyle(lineWidth: 1, dash: [6]))
+                .fill(colorScheme == .dark ? Color.white.opacity(0.03) : Color.black.opacity(0.02))
+                .strokeBorder(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05), style: StrokeStyle(lineWidth: 1, dash: [6]))
         )
     }
     

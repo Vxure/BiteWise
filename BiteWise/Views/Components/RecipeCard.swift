@@ -3,6 +3,7 @@ import SwiftUI
 struct RecipeCard: View {
     let recipe: Recipe
     @State private var isPressed = false
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -57,17 +58,17 @@ struct RecipeCard: View {
                 .padding(.horizontal, 10)
                 .background(
                     Capsule()
-                        .fill(Color.gray.opacity(0.1))
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.gray.opacity(0.1))
                 )
             }
         }
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color.white)
+                .fill(Color(.secondarySystemBackground))
         )
-        .shadow(color: recipeColor.opacity(0.12), radius: 16, x: 0, y: 8)
-        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+        .shadow(color: colorScheme == .dark ? .clear : recipeColor.opacity(0.12), radius: 16, x: 0, y: 8)
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
     }

@@ -9,6 +9,8 @@ import SwiftUI
 
 @main
 struct BiteWiseApp: App {
+    @StateObject private var appSettings = AppSettings.shared
+    
     init() {
         // Make navigation bar transparent
         let appearance = UINavigationBarAppearance()
@@ -23,6 +25,8 @@ struct BiteWiseApp: App {
     var body: some Scene {
         WindowGroup {
             AppNavigation()
+                .preferredColorScheme(appSettings.appTheme.colorScheme)
+                .environmentObject(appSettings)
         }
     }
 }

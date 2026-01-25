@@ -15,6 +15,7 @@ struct RecipeSuggestionScreen: View {
     @State private var showingAIAssistant = false
     @ObservedObject private var sessionContext = SessionContext.shared
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     
     // Scroll tracking state for fading header
     @State private var scrollOffset: CGFloat = 0
@@ -48,9 +49,15 @@ struct RecipeSuggestionScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             // Main content - ScrollView with proper bottom padding
             ScrollView {
@@ -154,18 +161,7 @@ struct RecipeSuggestionScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 20)
             .padding(.bottom, 24)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.bwGradientCream, location: 0),
-                        .init(color: Color.bwGradientCream, location: 0.6),
-                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
-                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)

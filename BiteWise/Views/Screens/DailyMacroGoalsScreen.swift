@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DailyMacroGoalsScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var dataManager = DataManager.shared
     
     // Current date formatted
@@ -39,9 +40,15 @@ struct DailyMacroGoalsScreen: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 20) {

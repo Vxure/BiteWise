@@ -150,6 +150,7 @@ private struct SecondaryFABButton: View {
     let accentColor: Color
     let delay: Double
     let action: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     @State private var isVisible = false
     
@@ -168,16 +169,16 @@ private struct SecondaryFABButton: View {
                     .padding(.vertical, 8)
                     .background(
                         Capsule()
-                            .fill(Color.white)
-                            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                            .fill(Color(.secondarySystemBackground))
+                            .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                     )
                 
                 // Icon button
                 ZStack {
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color(.secondarySystemBackground))
                         .frame(width: 48, height: 48)
-                        .shadow(color: accentColor.opacity(0.2), radius: 8, x: 0, y: 4)
+                        .shadow(color: colorScheme == .dark ? .clear : accentColor.opacity(0.2), radius: 8, x: 0, y: 4)
                     
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .semibold))

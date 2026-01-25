@@ -4,13 +4,20 @@ struct FeedbackScreen: View {
     @State private var rating = 0
     @State private var enjoyedRecipe = false
     @State private var comments = ""
+    @Environment(\.colorScheme) var colorScheme
     var onDone: () -> Void
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 24) {
@@ -100,11 +107,11 @@ struct FeedbackScreen: View {
                         }
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.6))
+                                .fill(Color(.tertiarySystemBackground))
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
                         )
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

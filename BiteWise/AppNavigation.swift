@@ -125,6 +125,7 @@ struct FloatingTabBar: View {
     let tabItems: [(image: String, title: String)]
     var onTabSelected: ((Int) -> Void)?
     @Namespace private var animation
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         VStack {
@@ -145,21 +146,38 @@ struct FloatingTabBar: View {
             .padding(.vertical, 8)
             .background(
                 ZStack {
-                    // Thick frosted glass effect
+                    // Frosted glass effect
                     RoundedRectangle(cornerRadius: 24)
                         .fill(.ultraThinMaterial)
                     
-                    // Warm cream overlay
+                    // Adaptive overlay - cream in light, darker in dark mode
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(Color.bwSurface.opacity(0.85))
+                        .fill(colorScheme == .dark 
+                              ? Color(.secondarySystemBackground).opacity(0.9)
+                              : Color.bwSurface.opacity(0.85))
                     
                     // Subtle border
                     RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.white.opacity(0.6), lineWidth: 1)
+                        .stroke(
+                            colorScheme == .dark 
+                                ? Color.white.opacity(0.1)
+                                : Color.white.opacity(0.6),
+                            lineWidth: 1
+                        )
                 }
             )
-            .shadow(color: Color.black.opacity(0.08), radius: 16, x: 0, y: 6)
-            .shadow(color: Color.black.opacity(0.04), radius: 3, x: 0, y: 1)
+            .shadow(
+                color: colorScheme == .dark ? .clear : Color.black.opacity(0.08),
+                radius: 16,
+                x: 0,
+                y: 6
+            )
+            .shadow(
+                color: colorScheme == .dark ? .clear : Color.black.opacity(0.04),
+                radius: 3,
+                x: 0,
+                y: 1
+            )
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
         }
@@ -174,8 +192,13 @@ struct TabBarButton: View {
     let item: (image: String, title: String)
     var namespace: Namespace.ID
     var onTabSelected: ((Int) -> Void)?
+    @Environment(\.colorScheme) var colorScheme
     
     private var isSelected: Bool { selectedTab == index }
+    
+    private var adaptivePrimary: Color {
+        Color.bwAdaptivePrimary(for: colorScheme)
+    }
     
     var body: some View {
         Button(action: {
@@ -191,7 +214,7 @@ struct TabBarButton: View {
                     // Glow effect behind selected icon
                     if isSelected {
                         Circle()
-                            .fill(Color.bwPrimary.opacity(0.15))
+                            .fill(adaptivePrimary.opacity(0.15))
                             .frame(width: 36, height: 36)
                             .blur(radius: 6)
                             .matchedGeometryEffect(id: "glow", in: namespace)
@@ -200,7 +223,7 @@ struct TabBarButton: View {
                     // Icon with animated fill state
                     Image(systemName: isSelected ? filledIcon(for: item.image) : item.image)
                         .font(.system(size: 20, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? Color.bwPrimary : Color.gray.opacity(0.5))
+                        .foregroundColor(isSelected ? adaptivePrimary : .secondary)
                         .scaleEffect(isSelected ? 1.1 : 1.0)
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
                 }
@@ -210,11 +233,11 @@ struct TabBarButton: View {
                 Text(item.title)
                     .font(BWTypography.tabLabel)
                     .fontWeight(isSelected ? .semibold : .regular)
-                    .foregroundColor(isSelected ? Color.bwPrimary : Color.gray.opacity(0.5))
+                    .foregroundColor(isSelected ? adaptivePrimary : .secondary)
                 
                 // Indicator dot
                 Circle()
-                    .fill(Color.bwPrimary)
+                    .fill(adaptivePrimary)
                     .frame(width: 4, height: 4)
                     .opacity(isSelected ? 1 : 0)
                     .scaleEffect(isSelected ? 1 : 0.3)
@@ -341,8 +364,7 @@ struct MainTabView: View {
                 .navigationDestination(for: AppScreen.self) { screen in
                     navigationDestination(for: screen, navigationState: settingsNavigationState)
                 }
-                .navigationTitle("Settings")
-                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarHidden(true)
         }
         .environmentObject(settingsNavigationState)
     }
@@ -449,470 +471,8 @@ struct MainTabView: View {
     }
 }
 
-// Settings View
-struct SettingsView: View {
-    var navigationState: AppNavigationState
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
-    @ObservedObject private var appSettings = AppSettings.shared
-    
-    var body: some View {
-        ZStack {
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
-            
-            ScrollView {
-                VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Profile")
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .padding(.leading, 4)
-                        
-                        SettingsRow(icon: "person.fill", title: "User Profile", color: Color.bwAccentBlue) {
-                            navigationState.navigateTo(.userProfile)
-                        }
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Preferences")
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .padding(.leading, 4)
-                        
-                        VStack(spacing: 0) {
-                            SettingsRow(icon: "list.bullet", title: "Edit Pantry Items", color: Color.bwAccentGreen, showDivider: true) {
-                                navigationState.navigateTo(.pantrySetup)
-                            }
-                            
-                            SettingsRow(icon: "arrow.counterclockwise", title: "Reset Onboarding", color: Color.bwAccentOrange) {
-                                hasCompletedOnboarding = false
-                            }
-                        }
-                        .background(
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(.ultraThinMaterial)
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.white.opacity(0.5))
-                            }
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
-                    }
-                    
-                    // Scan Settings
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Scan")
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .padding(.leading, 4)
-                        
-                        ScanSettingsCard()
-                    }
-                    
-                    // Fridge Settings
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Fridge")
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .padding(.leading, 4)
-                        
-                        FridgeExpirySettingsCard()
-                    }
-                    
-                    // Chat Settings
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Chat")
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .padding(.leading, 4)
-                        
-                        SettingsRow(icon: "bubble.left.and.bubble.right.fill", title: "Chat Settings", color: Color.bwPrimary) {
-                            navigationState.navigateTo(.chatSettings)
-                        }
-                    }
-                    
-                    // Developer / API Settings
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Developer")
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .padding(.leading, 4)
-                        
-                        DemoModeToggleRow()
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Feedback")
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                            .padding(.leading, 4)
-                        
-                        SettingsRow(icon: "envelope.fill", title: "Send Feedback", color: Color.bwPrimaryCoral) {
-                            navigationState.navigateTo(.feedback)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 100)
-            }
-        }
-    }
-}
-
-// Scan Settings Card
-struct ScanSettingsCard: View {
-    @ObservedObject private var appSettings = AppSettings.shared
-    @State private var isExpanded = false
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header with expand/collapse
-            Button(action: {
-                BWHaptics.lightImpact()
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    isExpanded.toggle()
-                }
-            }) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.bwAccentBlue.opacity(0.15))
-                            .frame(width: 36, height: 36)
-                        
-                        Image(systemName: "camera.viewfinder")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(Color.bwAccentBlue)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Default Scan Behavior")
-                            .font(.bwBody())
-                            .foregroundColor(.primary)
-                        
-                        Text(appSettings.defaultScanMethod.rawValue)
-                            .font(.bwCaption())
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.gray.opacity(0.5))
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            
-            // Expanded options
-            if isExpanded {
-                Divider()
-                    .padding(.leading, 66)
-                
-                VStack(spacing: 0) {
-                    ForEach(ScanMergeMode.allCases, id: \.self) { mode in
-                        Button(action: {
-                            BWHaptics.selection()
-                            withAnimation(.bwSnappy) {
-                                appSettings.defaultScanMethod = mode
-                            }
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: mode.icon)
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(appSettings.defaultScanMethod == mode ? Color.bwPrimary : .secondary)
-                                    .frame(width: 24)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(mode.rawValue)
-                                        .font(BWTypography.bodyPrimary)
-                                        .foregroundColor(.primary)
-                                    
-                                    Text(mode.description)
-                                        .font(BWTypography.captionSmall)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                if appSettings.defaultScanMethod == mode {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(Color.bwPrimary)
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
-                            .background(
-                                appSettings.defaultScanMethod == mode ? Color.bwPrimary.opacity(0.06) : Color.clear
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        
-                        if mode != ScanMergeMode.allCases.last {
-                            Divider()
-                                .padding(.leading, 52)
-                        }
-                    }
-                }
-            }
-        }
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.5))
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
-    }
-}
-
-// Fridge Expiry Settings Card
-struct FridgeExpirySettingsCard: View {
-    @ObservedObject private var appSettings = AppSettings.shared
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Auto-expire toggle
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.bwAccentBlue.opacity(0.15))
-                        .frame(width: 36, height: 36)
-                    
-                    Image(systemName: "clock.badge.checkmark")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(Color.bwAccentBlue)
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-expire Items")
-                        .font(.bwBody())
-                        .foregroundColor(.primary)
-                    
-                    Text(appSettings.fridgeAutoExpireEnabled 
-                         ? "Items removed after \(appSettings.fridgeAutoExpireDays) days"
-                         : "Swipe to delete items manually")
-                        .font(.bwCaption())
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Toggle("", isOn: $appSettings.fridgeAutoExpireEnabled)
-                    .labelsHidden()
-                    .tint(Color.bwAccentBlue)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            
-            // Days picker (only shown when enabled)
-            if appSettings.fridgeAutoExpireEnabled {
-                Divider()
-                    .padding(.leading, 66)
-                
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.bwAccentGold.opacity(0.15))
-                            .frame(width: 36, height: 36)
-                        
-                        Image(systemName: "calendar")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(Color.bwAccentGold)
-                    }
-                    
-                    Text("Expire after")
-                        .font(.bwBody())
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    // Days stepper
-                    HStack(spacing: 8) {
-                        Button(action: {
-                            if appSettings.fridgeAutoExpireDays > 1 {
-                                appSettings.fridgeAutoExpireDays -= 1
-                                BWHaptics.lightImpact()
-                            }
-                        }) {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(appSettings.fridgeAutoExpireDays > 1 ? Color.bwAccentBlue : Color.gray.opacity(0.3))
-                        }
-                        .disabled(appSettings.fridgeAutoExpireDays <= 1)
-                        
-                        HStack(spacing: 4) {
-                            Text("\(appSettings.fridgeAutoExpireDays)")
-                                .font(BWTypography.bodyPrimary)
-                                .fontWeight(.semibold)
-                                .frame(minWidth: 24)
-                            
-                            Text("days")
-                                .font(BWTypography.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .fixedSize()
-                        
-                        Button(action: {
-                            if appSettings.fridgeAutoExpireDays < 30 {
-                                appSettings.fridgeAutoExpireDays += 1
-                                BWHaptics.lightImpact()
-                            }
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(appSettings.fridgeAutoExpireDays < 30 ? Color.bwAccentBlue : Color.gray.opacity(0.3))
-                        }
-                        .disabled(appSettings.fridgeAutoExpireDays >= 30)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-            }
-        }
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.5))
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: appSettings.fridgeAutoExpireEnabled)
-    }
-}
-
-// Demo Mode Toggle Row - matches existing Settings style
-struct DemoModeToggleRow: View {
-    @ObservedObject private var appSettings = AppSettings.shared
-    
-    var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(appSettings.isDemoMode ? Color.bwAccentGold.opacity(0.15) : Color.bwAccentGreen.opacity(0.15))
-                    .frame(width: 36, height: 36)
-                
-                Image(systemName: appSettings.isDemoMode ? "doc.text.fill" : "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(appSettings.isDemoMode ? Color.bwAccentGold : Color.bwAccentGreen)
-            }
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Demo Mode")
-                    .font(.bwBody())
-                    .foregroundColor(.primary)
-                
-                Text(appSettings.apiStatusMessage)
-                    .font(.bwCaption())
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            Toggle("", isOn: $appSettings.isDemoMode)
-                .labelsHidden()
-                .tint(Color.bwAccentGold)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.5))
-            }
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
-    }
-}
-
-struct SettingsRow: View {
-    let icon: String
-    let title: String
-    let color: Color
-    var showDivider: Bool = false
-    let action: () -> Void
-    @State private var isPressed = false
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 0) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(color.opacity(0.15))
-                            .frame(width: 36, height: 36)
-                        
-                        Image(systemName: icon)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(color)
-                    }
-                    
-                    Text(title)
-                        .font(.bwBody())
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.gray.opacity(0.5))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                
-                if showDivider {
-                    Divider()
-                        .padding(.leading, 66)
-                }
-            }
-        }
-        .background(
-            Group {
-                if !showDivider {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(.ultraThinMaterial)
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.white.opacity(0.5))
-                    }
-                    .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
-                }
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: showDivider ? 0 : 16))
-        .scaleEffect(isPressed ? 0.98 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in isPressed = true }
-                .onEnded { _ in isPressed = false }
-        )
-    }
-}
-
 #Preview {
     AppNavigation()
 }
+
 

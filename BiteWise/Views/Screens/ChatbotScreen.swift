@@ -8,6 +8,7 @@ struct ChatbotScreen: View {
     @State private var selectedRecipeForNavigation: Recipe?
     @ObservedObject private var sessionContext = SessionContext.shared
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     
     /// Optional recipe context - if provided, chat is about this specific recipe
     var recipe: Recipe?
@@ -20,9 +21,15 @@ struct ChatbotScreen: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Header
@@ -54,14 +61,14 @@ struct ChatbotScreen: View {
                         Text("Done")
                             .font(BWTypography.buttonSmall)
                             .fontWeight(.semibold)
-                            .foregroundColor(Color.bwAccent)
+                            .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.white)
+                                    .fill(Color(.secondarySystemBackground))
                             )
-                            .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
+                            .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
                     }
                     .buttonStyle(.bwPressable)
                 }
@@ -268,13 +275,14 @@ struct ChatbotScreen: View {
 
 struct TypingIndicator: View {
     @State private var animationOffset: CGFloat = 0
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
-                        .fill(Color.gray.opacity(0.5))
+                        .fill(Color.secondary.opacity(0.5))
                         .frame(width: 8, height: 8)
                         .offset(y: animationOffset(for: index))
                 }
@@ -283,9 +291,9 @@ struct TypingIndicator: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 18)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
+                    .fill(Color(.secondarySystemBackground))
             )
+            .adaptiveShadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
             
             Spacer()
         }

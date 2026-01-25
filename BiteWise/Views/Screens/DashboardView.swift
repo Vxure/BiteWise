@@ -11,6 +11,7 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 struct DashboardView: View {
     @EnvironmentObject private var navigationState: AppNavigationState
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     @State private var isVisible = false
     @AppStorage("hasSeenWelcomeHint") private var hasSeenWelcomeHint: Bool = false
     
@@ -78,9 +79,15 @@ struct DashboardView: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Enhanced gradient background
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             // Content ScrollView
             ScrollView {
@@ -164,18 +171,7 @@ struct DashboardView: View {
                     .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.bwGradientCream, location: 0),
-                        .init(color: Color.bwGradientCream, location: 0.6),
-                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
-                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
@@ -231,13 +227,13 @@ struct DashboardView: View {
             }) {
                 ZStack {
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color(.secondarySystemBackground))
                         .frame(width: 44, height: 44)
-                        .shadow(color: Color.bwAccent.opacity(0.1), radius: 8, x: 0, y: 4)
+                        .adaptiveShadow(color: Color.bwAdaptiveAccent(for: colorScheme).opacity(0.1), radius: 8, x: 0, y: 4)
                     
                     Image(systemName: dataManager.hasFavorites ? "star.fill" : "star")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(Color.bwAccent)
+                        .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
                 }
             }
             .buttonStyle(.bwPressable)
@@ -249,13 +245,13 @@ struct DashboardView: View {
             }) {
                 ZStack {
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color(.secondarySystemBackground))
                         .frame(width: 44, height: 44)
-                        .shadow(color: Color.bwPrimary.opacity(0.1), radius: 8, x: 0, y: 4)
+                        .adaptiveShadow(color: Color.bwAdaptivePrimary(for: colorScheme).opacity(0.1), radius: 8, x: 0, y: 4)
                     
                     Image(systemName: "person.fill")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(Color.bwPrimary)
+                        .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                 }
             }
             .buttonStyle(.bwPressable)
@@ -350,12 +346,12 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white)
-                .shadow(color: Color.bwPrimary.opacity(0.1), radius: 16, x: 0, y: 8)
+                .fill(Color(.secondarySystemBackground))
         )
+        .adaptiveShadow(color: Color.bwAdaptivePrimary(for: colorScheme).opacity(0.1), radius: 16, x: 0, y: 8)
         .overlay(
             RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.bwPrimary.opacity(0.1), lineWidth: 1)
+                .stroke(colorScheme == .dark ? Color.white.opacity(0.05) : Color.bwPrimary.opacity(0.1), lineWidth: 1)
         )
     }
     
@@ -424,7 +420,7 @@ struct DashboardView: View {
                         )
                     )
                     .frame(width: 44, height: 44)
-                    .shadow(color: color.opacity(0.3), radius: 6, x: 0, y: 3)
+                    .adaptiveShadow(color: color.opacity(0.3), radius: 6, x: 0, y: 3)
                 
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: .semibold))
@@ -446,9 +442,9 @@ struct DashboardView: View {
         .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+                .fill(Color(.tertiarySystemBackground))
         )
+        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
     }
     
     // MARK: - Favorites Preview
@@ -516,9 +512,9 @@ struct DashboardView: View {
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
+                        .fill(Color(.tertiarySystemBackground))
                 )
+                .adaptiveShadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
             }
         }
         .bwCardStyle(padding: 14, cornerRadius: 16)
@@ -563,9 +559,9 @@ struct DashboardView: View {
         .frame(width: 140)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+                .fill(Color(.tertiarySystemBackground))
         )
+        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
     }
     
     // MARK: - Pantry Overview
@@ -657,9 +653,9 @@ struct DashboardView: View {
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+                        .fill(Color(.tertiarySystemBackground))
                 )
+                .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
             }
             .buttonStyle(.plain)
         }
@@ -763,9 +759,9 @@ struct DashboardView: View {
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+                        .fill(Color(.tertiarySystemBackground))
                 )
+                .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
             }
             .buttonStyle(.plain)
         }
@@ -1066,9 +1062,9 @@ struct DashboardView: View {
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
+                        .fill(Color(.tertiarySystemBackground))
                 )
+                .adaptiveShadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
@@ -1138,9 +1134,9 @@ struct DashboardView: View {
         .frame(width: 140)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+                .fill(Color(.tertiarySystemBackground))
         )
+        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
     }
     
     // MARK: - Up Next Suggestion
@@ -1189,9 +1185,9 @@ struct DashboardView: View {
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
+                        .fill(Color(.tertiarySystemBackground))
                 )
+                .adaptiveShadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
             }
             .bwCardStyle(padding: 14, cornerRadius: 16)
         }
@@ -1392,14 +1388,14 @@ struct LogBreakfastSheet: View {
                                 
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.gray.opacity(0.5))
+                                    .foregroundStyle(.secondary)
                             }
                             .padding(14)
                             .background(
                                 RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+                                    .fill(Color(.secondarySystemBackground))
                             )
+                            .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
                         }
                         .buttonStyle(.bwPressable)
                     }
@@ -1440,7 +1436,7 @@ struct LogBreakfastSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        .background(Color.bwBackgroundCream.ignoresSafeArea())
+        .background(Color(.systemBackground).ignoresSafeArea())
         .sheet(item: $selectedRecipe) { recipeToShow in
             NavigationStack {
                 RecipeDetailScreen(recipe: recipeToShow, onFeedback: {})

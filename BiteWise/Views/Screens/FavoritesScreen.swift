@@ -3,6 +3,7 @@ import SwiftUI
 struct FavoritesScreen: View {
     @EnvironmentObject private var navigationState: AppNavigationState
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     @State private var isVisible = false
     
     private var favoriteRecipes: [Recipe] {
@@ -11,9 +12,15 @@ struct FavoritesScreen: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -92,6 +99,7 @@ struct FavoriteRecipeCard: View {
     let recipe: Recipe
     let onTap: () -> Void
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     
     private var recipeColor: Color {
         if recipe.title.contains("Carbonara") || recipe.title.contains("Pasta") {
@@ -175,9 +183,9 @@ struct FavoriteRecipeCard: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 18)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+                    .fill(Color(.secondarySystemBackground))
             )
+            .adaptiveShadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
         }
         .buttonStyle(.bwPressable)
     }

@@ -5,6 +5,7 @@ import SwiftUI
 struct OnboardingCompletionScreen: View {
     var onComplete: () -> Void
     var onScanNow: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     // Animation states
     @State private var checkmarkScale: CGFloat = 0
@@ -17,9 +18,15 @@ struct OnboardingCompletionScreen: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             // Confetti-like decorative elements
             if confettiVisible {

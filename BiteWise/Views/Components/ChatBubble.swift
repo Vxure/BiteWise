@@ -4,6 +4,7 @@ import MarkdownUI
 struct ChatBubble: View {
     let message: ChatMessage
     var onRecipeTap: ((Recipe) -> Void)? = nil
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
@@ -15,7 +16,10 @@ struct ChatBubble: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.bwPrimaryCoral.opacity(0.2), Color.bwPrimaryOrange.opacity(0.1)],
+                                colors: [
+                                    Color.bwAdaptivePrimaryCoral(for: colorScheme).opacity(0.2), 
+                                    Color.bwAdaptivePrimaryOrange(for: colorScheme).opacity(0.1)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -24,7 +28,7 @@ struct ChatBubble: View {
                     
                     Image(systemName: "sparkles")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color.bwPrimaryCoral)
+                        .foregroundColor(Color.bwAdaptivePrimaryCoral(for: colorScheme))
                 }
             }
             
@@ -47,16 +51,19 @@ struct ChatBubble: View {
                     message.isUser
                         ? AnyShapeStyle(
                             LinearGradient(
-                                colors: [Color.bwPrimaryCoral, Color.bwPrimaryOrange],
+                                colors: [
+                                    colorScheme == .dark ? Color(hex: "FF8A65") : Color.bwPrimaryCoral,
+                                    colorScheme == .dark ? Color(hex: "FFAB91") : Color.bwPrimaryOrange
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        : AnyShapeStyle(Color.white.opacity(0.9))
+                        : AnyShapeStyle(Color(.secondarySystemBackground))
                 )
                 .foregroundColor(message.isUser ? .white : .primary)
                 .roundedCorner(20, corners: message.isUser ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight])
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
                 
             case .recipeCard(let recipe):
                 MiniRecipeCard(recipe: recipe, onTap: {
@@ -76,6 +83,7 @@ struct ChatBubble: View {
 struct MiniRecipeCard: View {
     let recipe: Recipe
     var onTap: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     @State private var isPressed = false
     
@@ -164,12 +172,12 @@ struct MiniRecipeCard: View {
             .frame(width: 200)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
+                    .fill(Color(.tertiarySystemBackground))
             )
+            .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(recipeColor.opacity(0.2), lineWidth: 1)
+                    .stroke(recipeColor.opacity(colorScheme == .dark ? 0.3 : 0.2), lineWidth: 1)
             )
         }
         .buttonStyle(.bwPressable)

@@ -3,14 +3,21 @@ import SwiftUI
 struct ChatSettingsScreen: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     @State private var showClearConfirmation = false
     var onDone: () -> Void
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 20) {
@@ -130,8 +137,7 @@ struct ChatSettingsScreen: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                    .fill(Color(.tertiarySystemBackground))
             )
             
             // Days selector (only show when enabled)
@@ -156,7 +162,7 @@ struct ChatSettingsScreen: View {
                             }) {
                                 Image(systemName: "minus.circle.fill")
                                     .font(.system(size: 28))
-                                    .foregroundColor(settings.generalChatExpireDays > 1 ? Color.bwPrimary : Color.gray.opacity(0.3))
+                                    .foregroundColor(settings.generalChatExpireDays > 1 ? Color.bwAdaptivePrimary(for: colorScheme) : Color.secondary.opacity(0.3))
                             }
                             .buttonStyle(.bwPressable)
                             .disabled(settings.generalChatExpireDays <= 1)
@@ -173,7 +179,7 @@ struct ChatSettingsScreen: View {
                             }) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 28))
-                                    .foregroundColor(settings.generalChatExpireDays < 90 ? Color.bwPrimary : Color.gray.opacity(0.3))
+                                    .foregroundColor(settings.generalChatExpireDays < 90 ? Color.bwAdaptivePrimary(for: colorScheme) : Color.secondary.opacity(0.3))
                             }
                             .buttonStyle(.bwPressable)
                             .disabled(settings.generalChatExpireDays >= 90)
@@ -187,8 +193,7 @@ struct ChatSettingsScreen: View {
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                        .fill(Color(.tertiarySystemBackground))
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -235,8 +240,7 @@ struct ChatSettingsScreen: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                    .fill(Color(.tertiarySystemBackground))
             )
             
             // Recipe days selector (only show when enabled)
@@ -261,7 +265,7 @@ struct ChatSettingsScreen: View {
                             }) {
                                 Image(systemName: "minus.circle.fill")
                                     .font(.system(size: 28))
-                                    .foregroundColor(settings.recipeChatExpireDays > 1 ? Color.bwSecondary : Color.gray.opacity(0.3))
+                                    .foregroundColor(settings.recipeChatExpireDays > 1 ? Color.bwAdaptiveSecondary(for: colorScheme) : Color.secondary.opacity(0.3))
                             }
                             .buttonStyle(.bwPressable)
                             .disabled(settings.recipeChatExpireDays <= 1)
@@ -278,7 +282,7 @@ struct ChatSettingsScreen: View {
                             }) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 28))
-                                    .foregroundColor(settings.recipeChatExpireDays < 90 ? Color.bwSecondary : Color.gray.opacity(0.3))
+                                    .foregroundColor(settings.recipeChatExpireDays < 90 ? Color.bwAdaptiveSecondary(for: colorScheme) : Color.secondary.opacity(0.3))
                             }
                             .buttonStyle(.bwPressable)
                             .disabled(settings.recipeChatExpireDays >= 90)
@@ -292,8 +296,7 @@ struct ChatSettingsScreen: View {
                 .padding(14)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                        .fill(Color(.tertiarySystemBackground))
                 )
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -396,9 +399,9 @@ struct ChatSettingsScreen: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+                .fill(Color(.tertiarySystemBackground))
         )
+        .adaptiveShadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
     }
     
     // MARK: - Clear All Section

@@ -17,6 +17,7 @@ struct DetectedIngredientsScreen: View {
     @ObservedObject private var sessionContext = SessionContext.shared
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var appSettings = AppSettings.shared
+    @Environment(\.colorScheme) var colorScheme
     
     // Scroll tracking state for fading header
     @State private var scrollOffset: CGFloat = 0
@@ -68,9 +69,15 @@ struct DetectedIngredientsScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -169,18 +176,7 @@ struct DetectedIngredientsScreen: View {
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 24)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.bwGradientCream, location: 0),
-                        .init(color: Color.bwGradientCream, location: 0.6),
-                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
-                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
@@ -422,17 +418,18 @@ struct IngredientItem: Identifiable {
 struct IngredientCardView: View {
     @Binding var ingredient: IngredientItem
     @State private var isPressed = false
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         HStack(spacing: 14) {
             // Checkbox
             ZStack {
                 Circle()
-                    .fill(ingredient.isSelected ? Color.bwAccentGreen : Color.clear)
+                    .fill(ingredient.isSelected ? Color.bwAdaptiveAccentGreen(for: colorScheme) : Color.clear)
                     .frame(width: 26, height: 26)
                     .overlay(
                         Circle()
-                            .stroke(ingredient.isSelected ? Color.bwAccentGreen : Color.gray.opacity(0.4), lineWidth: 2)
+                            .stroke(ingredient.isSelected ? Color.bwAdaptiveAccentGreen(for: colorScheme) : Color.secondary.opacity(0.4), lineWidth: 2)
                     )
                 
                 if ingredient.isSelected {
@@ -459,24 +456,20 @@ struct IngredientCardView: View {
                         .font(.bwCaption2())
                         .fontWeight(.medium)
                 }
-                .foregroundColor(Color.bwPrimaryCoral)
+                .foregroundColor(Color.bwAdaptivePrimaryCoral(for: colorScheme))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.bwPrimaryCoral.opacity(0.12))
+                .background(Color.bwAdaptivePrimaryCoral(for: colorScheme).opacity(0.12))
                 .cornerRadius(10)
             }
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 16)
         .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white.opacity(0.6))
-            }
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.secondarySystemBackground))
         )
-        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
+        .adaptiveShadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
         .onTapGesture {
@@ -494,12 +487,13 @@ struct IngredientCardView: View {
 struct AddIngredientSheet: View {
     @Binding var isPresented: Bool
     @Binding var ingredientName: String
+    @Environment(\.colorScheme) var colorScheme
     var onAdd: () -> Void
     
     var body: some View {
         NavigationStack {
             ZStack {
-                BWGradients.backgroundGradient
+                Color(.systemBackground)
                     .ignoresSafeArea()
                 
                 VStack(alignment: .leading, spacing: 24) {
@@ -512,7 +506,7 @@ struct AddIngredientSheet: View {
                         .padding()
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.8))
+                                .fill(Color(.secondarySystemBackground))
                         )
                     
                     GradientButton(
@@ -548,6 +542,7 @@ struct PantryItemsRow: View {
     let itemCount: Int
     let onTap: () -> Void
     @State private var isPressed = false
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: onTap) {
@@ -555,12 +550,12 @@ struct PantryItemsRow: View {
                 // Pantry icon
                 ZStack {
                     Circle()
-                        .fill(Color.bwAccentGold.opacity(0.15))
+                        .fill(Color.bwAdaptiveAccentGold(for: colorScheme).opacity(0.15))
                         .frame(width: 26, height: 26)
                     
                     Image(systemName: "cabinet.fill")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color.bwAccentGold)
+                        .foregroundColor(Color.bwAdaptiveAccentGold(for: colorScheme))
                 }
                 
                 // Label with count
@@ -576,19 +571,15 @@ struct PantryItemsRow: View {
                 // Chevron arrow
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.gray.opacity(0.5))
+                    .foregroundColor(.secondary)
             }
             .padding(.vertical, 14)
             .padding(.horizontal, 16)
             .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(.ultraThinMaterial)
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white.opacity(0.6))
-                }
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color(.secondarySystemBackground))
             )
-            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
+            .adaptiveShadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
             .scaleEffect(isPressed ? 0.98 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
         }
@@ -607,6 +598,7 @@ struct PantryEditSheet: View {
     @ObservedObject private var dataManager = DataManager.shared
     @State private var selectedItems: [String] = []
     @State private var newItemName: String = ""
+    @Environment(\.colorScheme) var colorScheme
     
     // Common pantry items that will be displayed as options
     let commonItems = [
@@ -617,7 +609,7 @@ struct PantryEditSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                BWGradients.backgroundGradient
+                Color(.systemBackground)
                     .ignoresSafeArea()
                 
                 ScrollView {
@@ -640,7 +632,7 @@ struct PantryEditSheet: View {
                                 .padding()
                                 .background(
                                     RoundedRectangle(cornerRadius: 14)
-                                        .fill(Color.white.opacity(0.8))
+                                        .fill(Color(.secondarySystemBackground))
                                 )
                             
                             Button(action: addNewItem) {
@@ -650,14 +642,14 @@ struct PantryEditSheet: View {
                                     .frame(width: 50, height: 50)
                                     .background(
                                         LinearGradient(
-                                            colors: [Color.bwPrimaryCoral, Color.bwPrimaryOrange],
+                                            colors: [Color.bwAdaptivePrimaryCoral(for: colorScheme), Color.bwAdaptivePrimaryOrange(for: colorScheme)],
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         )
                                     )
                                     .cornerRadius(14)
-                                    .shadow(color: Color.bwPrimaryCoral.opacity(0.3), radius: 6, y: 3)
                             }
+                            .adaptiveShadow(color: Color.bwAdaptivePrimaryCoral(for: colorScheme).opacity(0.3), radius: 6, x: 0, y: 3)
                             .disabled(newItemName.isEmpty)
                             .opacity(newItemName.isEmpty ? 0.6 : 1.0)
                         }
@@ -681,13 +673,17 @@ struct PantryEditSheet: View {
                                             .padding(.horizontal, 18)
                                             .background(
                                                 Capsule()
-                                                    .fill(isSelected ? Color.bwAccentGreen.opacity(0.2) : Color.white.opacity(0.8))
+                                                    .fill(isSelected 
+                                                        ? Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(colorScheme == .dark ? 0.25 : 0.2)
+                                                        : Color(.tertiarySystemBackground))
                                             )
                                             .overlay(
                                                 Capsule()
-                                                    .stroke(isSelected ? Color.bwAccentGreen : Color.gray.opacity(0.2), lineWidth: 1.5)
+                                                    .stroke(isSelected 
+                                                        ? Color.bwAdaptiveAccentGreen(for: colorScheme) 
+                                                        : Color.secondary.opacity(0.2), lineWidth: 1.5)
                                             )
-                                            .foregroundColor(isSelected ? Color.bwAccentGreen : .primary)
+                                            .foregroundColor(isSelected ? Color.bwAdaptiveAccentGreen(for: colorScheme) : .primary)
                                     }
                                 }
                             }
@@ -722,16 +718,16 @@ struct PantryEditSheet: View {
                                             }) {
                                                 Image(systemName: "xmark.circle.fill")
                                                     .font(.system(size: 14))
-                                                    .foregroundColor(Color.bwAccentGreen.opacity(0.6))
+                                                    .foregroundColor(Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(0.6))
                                             }
                                         }
                                         .padding(.vertical, 10)
                                         .padding(.horizontal, 16)
                                         .background(
                                             Capsule()
-                                                .fill(Color.bwAccentGreen.opacity(0.15))
+                                                .fill(Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(colorScheme == .dark ? 0.2 : 0.15))
                                         )
-                                        .foregroundColor(Color.bwAccentGreen)
+                                        .foregroundColor(Color.bwAdaptiveAccentGreen(for: colorScheme))
                                     }
                                 }
                             }

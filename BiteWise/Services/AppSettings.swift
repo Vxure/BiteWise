@@ -1,6 +1,41 @@
 import Foundation
 import SwiftUI
 
+// MARK: - App Theme
+/// Theme options for the app appearance
+enum AppTheme: String, CaseIterable, Identifiable {
+    case system = "system"
+    case light = "light"
+    case dark = "dark"
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .system: return "Automatic"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
+    }
+    
+    /// Returns the preferred ColorScheme for SwiftUI, nil means follow system
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 /// App-wide settings manager with demo mode control
 /// Handles the toggle between using real Gemini API calls and dummy data
 class AppSettings: ObservableObject {
@@ -21,6 +56,9 @@ class AppSettings: ObservableObject {
     
     // Scan behavior key
     private let defaultScanMethodKey = "defaultScanMethod"
+    
+    // Appearance key
+    private let appThemeKey = "appTheme"
     
     // MARK: - Published Properties
     
@@ -86,6 +124,13 @@ class AppSettings: ObservableObject {
         }
     }
     
+    /// App appearance theme: system, light, or dark
+    @Published var appTheme: AppTheme {
+        didSet {
+            UserDefaults.standard.set(appTheme.rawValue, forKey: appThemeKey)
+        }
+    }
+    
     // MARK: - Initialization
     
     private init() {
@@ -134,6 +179,14 @@ class AppSettings: ObservableObject {
             self.defaultScanMethod = scanMode
         } else {
             self.defaultScanMethod = .askEveryTime // Default to asking every time
+        }
+        
+        // Load app theme
+        if let savedTheme = UserDefaults.standard.string(forKey: appThemeKey),
+           let theme = AppTheme(rawValue: savedTheme) {
+            self.appTheme = theme
+        } else {
+            self.appTheme = .system // Default to system theme
         }
     }
     

@@ -12,6 +12,7 @@ struct PantrySetupScreen: View {
     @State private var newItemName: String = ""
     @State private var selectedItems: [String] = []
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     
     // Scroll tracking state for fading header
     @State private var scrollOffset: CGFloat = 0
@@ -61,9 +62,15 @@ struct PantrySetupScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             // Main scroll content
             ScrollView {
@@ -122,7 +129,7 @@ struct PantrySetupScreen: View {
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 14)
-                                    .fill(Color.white.opacity(0.8))
+                                    .fill(Color(.secondarySystemBackground))
                             )
                         
                         Button(action: addNewItem) {
@@ -163,13 +170,17 @@ struct PantrySetupScreen: View {
                                         .padding(.horizontal, 18)
                                         .background(
                                             Capsule()
-                                                .fill(isSelected ? Color.bwAccentGreen.opacity(0.2) : Color.white.opacity(0.8))
+                                                .fill(isSelected 
+                                                    ? Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(colorScheme == .dark ? 0.25 : 0.2) 
+                                                    : Color(.tertiarySystemBackground))
                                         )
                                         .overlay(
                                             Capsule()
-                                                .stroke(isSelected ? Color.bwAccentGreen : Color.gray.opacity(0.2), lineWidth: 1.5)
+                                                .stroke(isSelected 
+                                                    ? Color.bwAdaptiveAccentGreen(for: colorScheme) 
+                                                    : Color.secondary.opacity(0.2), lineWidth: 1.5)
                                         )
-                                        .foregroundColor(isSelected ? Color.bwAccentGreen : .primary)
+                                        .foregroundColor(isSelected ? Color.bwAdaptiveAccentGreen(for: colorScheme) : .primary)
                                 }
                             }
                         }
@@ -204,16 +215,16 @@ struct PantrySetupScreen: View {
                                         }) {
                                             Image(systemName: "xmark.circle.fill")
                                                 .font(.system(size: 14))
-                                                .foregroundColor(Color.bwAccentGreen.opacity(0.6))
+                                                .foregroundColor(Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(0.6))
                                         }
                                     }
                                     .padding(.vertical, 10)
                                     .padding(.horizontal, 16)
                                     .background(
                                         Capsule()
-                                            .fill(Color.bwAccentGreen.opacity(0.15))
+                                            .fill(Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(colorScheme == .dark ? 0.2 : 0.15))
                                     )
-                                    .foregroundColor(Color.bwAccentGreen)
+                                    .foregroundColor(Color.bwAdaptiveAccentGreen(for: colorScheme))
                                 }
                             }
                         }
@@ -267,18 +278,7 @@ struct PantrySetupScreen: View {
                         .padding(.bottom, 8)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    // Gradient background that blends with page background
-                    LinearGradient(
-                        colors: [
-                            Color.bwGradientCream,
-                            Color.bwGradientCream.opacity(0.95),
-                            Color.bwGradientCream.opacity(0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .background(BWGradients.headerFadeGradient(for: colorScheme))
                 .offset(y: headerTranslateY)
                 .opacity(headerOpacity)
                 .animation(.easeOut(duration: 0.2), value: headerVisible)

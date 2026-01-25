@@ -6,6 +6,7 @@ struct ChatInputBar: View {
     let isTyping: Bool
     var isFocused: FocusState<Bool>.Binding
     var onSend: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     // Tab bar height to account for when keyboard is NOT visible
     var tabBarHeight: CGFloat = 100
@@ -37,35 +38,35 @@ struct ChatInputBar: View {
                         RoundedRectangle(cornerRadius: 26)
                             .fill(.ultraThinMaterial)
                         
-                        // Tinted overlay matching app theme
-                        RoundedRectangle(cornerRadius: 26)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color.bwGradientCream.opacity(0.6),
-                                        Color.white.opacity(0.4)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                        // Tinted overlay matching app theme - adaptive
+                        if colorScheme == .dark {
+                            RoundedRectangle(cornerRadius: 26)
+                                .fill(Color(.secondarySystemBackground).opacity(0.8))
+                        } else {
+                            RoundedRectangle(cornerRadius: 26)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.bwGradientCream.opacity(0.6),
+                                            Color.white.opacity(0.4)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
-                            )
+                        }
                         
                         // Subtle border for depth
                         RoundedRectangle(cornerRadius: 26)
                             .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.8),
-                                        Color.bwPrimary.opacity(0.1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
+                                colorScheme == .dark
+                                    ? Color.white.opacity(0.1)
+                                    : Color.white.opacity(0.8),
                                 lineWidth: 1
                             )
                     }
-                    .shadow(color: Color.bwPrimary.opacity(0.08), radius: 12, x: 0, y: 4)
-                    .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
+                    .shadow(color: colorScheme == .dark ? .clear : Color.bwPrimary.opacity(0.08), radius: 12, x: 0, y: 4)
+                    .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
                 )
                 
                 // Send button

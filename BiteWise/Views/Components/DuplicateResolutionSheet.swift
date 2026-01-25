@@ -3,6 +3,7 @@ import SwiftUI
 /// Sheet for resolving duplicate items during smart merge
 struct DuplicateResolutionSheet: View {
     @Binding var duplicates: [DuplicateItem]
+    @Environment(\.colorScheme) var colorScheme
     var onApply: () -> Void
     var onCancel: () -> Void
     
@@ -75,13 +76,17 @@ struct DuplicateResolutionSheet: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.bwBackgroundCream.ignoresSafeArea())
+        .background(
+            (colorScheme == .dark ? Color(.systemBackground) : Color.bwBackgroundCream)
+                .ignoresSafeArea()
+        )
     }
 }
 
 /// Row for resolving a single duplicate item
 struct DuplicateItemRow: View {
     @Binding var duplicate: DuplicateItem
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -89,12 +94,12 @@ struct DuplicateItemRow: View {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(Color.bwPrimary.opacity(0.12))
+                        .fill(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.12))
                         .frame(width: 36, height: 36)
                     
                     Image(systemName: duplicate.existingItem.categoryIcon)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color.bwPrimary)
+                        .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                 }
                 
                 Text(duplicate.existingItem.name)
@@ -129,7 +134,7 @@ struct DuplicateItemRow: View {
                     
                     Text(duplicate.newItem.quantity.isEmpty ? "No quantity" : duplicate.newItem.quantity)
                         .font(.bwBody())
-                        .foregroundColor(Color.bwPrimary)
+                        .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -155,9 +160,9 @@ struct DuplicateItemRow: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+                .fill(Color(.secondarySystemBackground))
         )
+        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
     }
     
     /// Check if quantities can be combined (both have numeric values)

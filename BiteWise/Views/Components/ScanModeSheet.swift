@@ -7,6 +7,7 @@ struct ScanModeSheet: View {
     @Binding var selectedMode: ScanMergeMode
     @State private var rememberChoice: Bool = false
     @ObservedObject private var appSettings = AppSettings.shared
+    @Environment(\.colorScheme) var colorScheme
     var onContinue: () -> Void
     var onCancel: () -> Void
     
@@ -123,7 +124,10 @@ struct ScanModeSheet: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.bwBackgroundCream.ignoresSafeArea())
+        .background(
+            (colorScheme == .dark ? Color(.systemBackground) : Color.bwBackgroundCream)
+                .ignoresSafeArea()
+        )
     }
 }
 
@@ -132,6 +136,7 @@ struct ScanModeOptionRow: View {
     let mode: ScanMergeMode
     let isSelected: Bool
     var onSelect: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: onSelect) {
@@ -139,12 +144,12 @@ struct ScanModeOptionRow: View {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(isSelected ? Color.bwPrimary.opacity(0.15) : Color.gray.opacity(0.1))
+                        .fill(isSelected ? Color.bwAdaptivePrimary(for: colorScheme).opacity(0.15) : Color.secondary.opacity(0.1))
                         .frame(width: 44, height: 44)
                     
                     Image(systemName: mode.icon)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(isSelected ? Color.bwPrimary : .secondary)
+                        .foregroundColor(isSelected ? Color.bwAdaptivePrimary(for: colorScheme) : .secondary)
                 }
                 
                 // Text
@@ -163,12 +168,12 @@ struct ScanModeOptionRow: View {
                 // Selection indicator
                 ZStack {
                     Circle()
-                        .stroke(isSelected ? Color.bwPrimary : Color.gray.opacity(0.3), lineWidth: 2)
+                        .stroke(isSelected ? Color.bwAdaptivePrimary(for: colorScheme) : Color.secondary.opacity(0.3), lineWidth: 2)
                         .frame(width: 24, height: 24)
                     
                     if isSelected {
                         Circle()
-                            .fill(Color.bwPrimary)
+                            .fill(Color.bwAdaptivePrimary(for: colorScheme))
                             .frame(width: 14, height: 14)
                     }
                 }
@@ -176,12 +181,12 @@ struct ScanModeOptionRow: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(isSelected ? 0.08 : 0.04), radius: isSelected ? 8 : 4, x: 0, y: 2)
+                    .fill(Color(.secondarySystemBackground))
             )
+            .adaptiveShadow(color: Color.black.opacity(isSelected ? 0.08 : 0.04), radius: isSelected ? 8 : 4, x: 0, y: 2)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.bwPrimary.opacity(0.3) : Color.clear, lineWidth: 2)
+                    .stroke(isSelected ? Color.bwAdaptivePrimary(for: colorScheme).opacity(0.3) : Color.clear, lineWidth: 2)
             )
         }
         .buttonStyle(.bwPressable)

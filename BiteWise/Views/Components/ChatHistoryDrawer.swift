@@ -5,6 +5,7 @@ struct ChatHistoryDrawer: View {
     @Binding var isOpen: Bool
     @ObservedObject var sessionContext = SessionContext.shared
     @ObservedObject var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     
     var onSelectSession: (ChatSession) -> Void
     var onNewChat: () -> Void
@@ -75,13 +76,13 @@ struct ChatHistoryDrawer: View {
                     .frame(maxHeight: geometry.size.height - tabBarHeight - 50)
                     .background(
                         // Fully opaque solid background to hide content underneath
-                        Color(hex: "FEF9E0")
+                        colorScheme == .dark ? Color(.systemBackground) : Color(hex: "FEF9E0")
                     )
                     .clipShape(
                         RoundedCornerShape(radius: 24, corners: [.topRight, .bottomRight])
                     )
-                    .shadow(color: Color.black.opacity(0.2), radius: 24, x: 8, y: 0)
-                    .shadow(color: Color.bwPrimary.opacity(0.1), radius: 8, x: 2, y: 0)
+                    .shadow(color: colorScheme == .dark ? Color.clear : Color.black.opacity(0.2), radius: 24, x: 8, y: 0)
+                    .shadow(color: colorScheme == .dark ? Color.clear : Color.bwPrimary.opacity(0.1), radius: 8, x: 2, y: 0)
                     .offset(x: isOpen ? 0 : -drawerWidth - 20)
                     
                     Spacer()
@@ -267,6 +268,7 @@ private struct SessionRow: View {
     let isActive: Bool
     var onSelect: () -> Void
     var onDelete: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     @State private var isPressed = false
     
@@ -309,8 +311,8 @@ private struct SessionRow: View {
             .contentShape(Rectangle()) // Extend hitbox to entire row
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(isActive ? Color.white : Color.clear)
-                    .shadow(color: isActive ? Color.black.opacity(0.05) : .clear, radius: 4, y: 2)
+                    .fill(isActive ? Color(.secondarySystemBackground) : Color.clear)
+                    .shadow(color: isActive && colorScheme == .light ? Color.black.opacity(0.05) : .clear, radius: 4, y: 2)
             )
             .padding(.horizontal, 8)
         }

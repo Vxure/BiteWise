@@ -5,6 +5,7 @@ struct GradientButton: View {
     var text: String
     var action: () -> Void
     @State private var isPressed = false
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         Button(action: {
@@ -22,19 +23,9 @@ struct GradientButton: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
-            .background(
-                // Base gradient - terracotta to peach
-                LinearGradient(
-                    colors: [
-                        Color.bwAccent,
-                        Color.bwCarbs
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
+            .background(BWGradients.accentGradient(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+            .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
         }
         .scaleEffect(isPressed ? 0.96 : 1.0)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isPressed)

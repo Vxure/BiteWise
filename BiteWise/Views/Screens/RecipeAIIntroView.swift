@@ -11,6 +11,7 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 struct RecipeAIIntroView: View {
     var onDismiss: () -> Void
     var showBackButton: Bool = true
+    @Environment(\.colorScheme) var colorScheme
     
     // Animation states
     @State private var mascotScale: CGFloat = 0.8
@@ -43,9 +44,15 @@ struct RecipeAIIntroView: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Header
@@ -234,6 +241,7 @@ private struct ChatHeader: View {
     let isInChatMode: Bool
     var onMenuTap: () -> Void
     var onBackTap: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         HStack(spacing: 14) {
@@ -245,9 +253,9 @@ private struct ChatHeader: View {
                     .padding(12)
                     .background(
                         Circle()
-                            .fill(Color.white)
-                            .shadow(color: Color.bwPrimary.opacity(0.1), radius: 8, y: 4)
+                            .fill(Color(.secondarySystemBackground))
                     )
+                    .adaptiveShadow(color: Color.bwPrimary.opacity(0.1), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(.bwPressable)
             
@@ -284,7 +292,7 @@ private struct ChatHeader: View {
                         .padding(10)
                         .background(
                             Circle()
-                                .fill(Color.white.opacity(0.8))
+                                .fill(Color(.tertiarySystemBackground))
                         )
                 }
                 .buttonStyle(.bwPressable)
@@ -292,17 +300,7 @@ private struct ChatHeader: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(
-            LinearGradient(
-                stops: [
-                    .init(color: Color.bwGradientCream, location: 0),
-                    .init(color: Color.bwGradientCream, location: 0.7),
-                    .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(BWGradients.headerFadeGradient(for: colorScheme))
     }
 }
 
@@ -499,6 +497,7 @@ struct FeatureCard: View {
     let subtitle: String
     let color: Color
     @State private var isPressed = false
+    @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -529,9 +528,9 @@ struct FeatureCard: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
+                .fill(Color(.secondarySystemBackground))
         )
-        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
         .scaleEffect(isPressed ? 0.97 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
     }

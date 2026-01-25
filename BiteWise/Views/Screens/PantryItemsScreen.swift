@@ -12,6 +12,7 @@ struct PantryItemsScreen: View {
     @EnvironmentObject private var navigationState: AppNavigationState
     @ObservedObject private var dataManager = DataManager.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
     @State private var showingAddItemSheet = false
     @State private var showingClearConfirmation = false
     
@@ -45,9 +46,15 @@ struct PantryItemsScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -95,13 +102,13 @@ struct PantryItemsScreen: View {
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color.white)
+                                .fill(Color(.secondarySystemBackground))
                                 .frame(width: 40, height: 40)
-                                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+                                .adaptiveShadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
                             
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(Color.bwPrimary)
+                                .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                         }
                     }
                     .buttonStyle(.bwPressable)
@@ -133,13 +140,13 @@ struct PantryItemsScreen: View {
                         } label: {
                             ZStack {
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(Color(.secondarySystemBackground))
                                     .frame(width: 40, height: 40)
-                                    .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+                                    .adaptiveShadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
                                 
                                 Image(systemName: "ellipsis")
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(Color.bwPrimary)
+                                    .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                             }
                         }
                     } else {
@@ -152,18 +159,7 @@ struct PantryItemsScreen: View {
                 .padding(.bottom, 16)
             }
             .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.bwGradientCream, location: 0),
-                        .init(color: Color.bwGradientCream, location: 0.6),
-                        .init(color: Color.bwGradientCream.opacity(0.8), location: 0.75),
-                        .init(color: Color.bwGradientCream.opacity(0), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
@@ -302,6 +298,7 @@ struct PantryItemsScreen: View {
 struct PantryItemRow: View {
     let item: Ingredient
     let onDelete: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     @State private var offset: CGFloat = 0
     @State private var isSwiping = false
@@ -352,12 +349,12 @@ struct PantryItemRow: View {
                 // Category icon
                 ZStack {
                     Circle()
-                        .fill(Color.bwPrimary.opacity(0.12))
+                        .fill(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.12))
                         .frame(width: 44, height: 44)
                     
                     Image(systemName: itemIcon)
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(Color.bwPrimary)
+                        .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                 }
                 
                 // Item info
@@ -369,7 +366,7 @@ struct PantryItemRow: View {
                     
                     Text("Pantry staple")
                         .font(BWTypography.captionSmall)
-                        .foregroundColor(Color.bwPrimary.opacity(0.8))
+                        .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.8))
                 }
                 
                 Spacer()
@@ -377,15 +374,15 @@ struct PantryItemRow: View {
                 // Swipe hint
                 Image(systemName: "chevron.left")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.gray.opacity(0.3))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.white)
-                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
+                    .fill(Color(.secondarySystemBackground))
             )
+            .adaptiveShadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 3)
             .offset(x: offset)
             .gesture(
                 DragGesture(minimumDistance: 15)
@@ -425,6 +422,7 @@ struct AddPantryItemSheet: View {
     @ObservedObject private var dataManager = DataManager.shared
     @State private var itemName = ""
     @FocusState private var isInputFocused: Bool
+    @Environment(\.colorScheme) var colorScheme
     
     // Quick add suggestions
     private let suggestions = [
@@ -436,8 +434,15 @@ struct AddPantryItemSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                BWGradients.backgroundGradient
-                    .ignoresSafeArea()
+                // Adaptive background
+                Group {
+                    if colorScheme == .dark {
+                        Color(.systemBackground)
+                    } else {
+                        BWGradients.backgroundGradient
+                    }
+                }
+                .ignoresSafeArea()
                 
                 VStack(alignment: .leading, spacing: 24) {
                     Text("Add Pantry Item")
@@ -458,7 +463,7 @@ struct AddPantryItemSheet: View {
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white)
+                                    .fill(Color(.secondarySystemBackground))
                             )
                     }
                     
@@ -476,12 +481,12 @@ struct AddPantryItemSheet: View {
                                 }) {
                                     Text(suggestion)
                                         .font(BWTypography.captionSmall)
-                                        .foregroundColor(Color.bwPrimary)
+                                        .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
                                         .padding(.horizontal, 14)
                                         .padding(.vertical, 8)
                                         .background(
                                             Capsule()
-                                                .fill(Color.bwPrimary.opacity(0.1))
+                                                .fill(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.1))
                                         )
                                 }
                                 .buttonStyle(.bwPressable)

@@ -10,6 +10,7 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 
 struct MacroGoalsOnboardingScreen: View {
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) var colorScheme
     @State private var macroGoals = UserProfile.MacroGoals(
         dailyCalories: 2000,
         proteinPercentage: 30,
@@ -55,9 +56,15 @@ struct MacroGoalsOnboardingScreen: View {
     
     var body: some View {
         ZStack(alignment: .top) {
-            // Background gradient
-            BWGradients.backgroundGradient
-                .ignoresSafeArea()
+            // Adaptive background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    BWGradients.backgroundGradient
+                }
+            }
+            .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 ScrollView {
@@ -138,16 +145,8 @@ struct MacroGoalsOnboardingScreen: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                // Gradient background that blends with page background
-                LinearGradient(
-                    colors: [
-                        Color.bwGradientCream,
-                        Color.bwGradientCream.opacity(0.95),
-                        Color.bwGradientCream.opacity(0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                // Gradient background that blends with page background (adaptive for dark mode)
+                BWGradients.headerFadeGradient(for: colorScheme)
             )
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)

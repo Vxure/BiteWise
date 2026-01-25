@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WelcomeScreen: View {
     var onGetStarted: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
     // Animation states
     @State private var logoScale: CGFloat = 0.6
@@ -59,16 +60,22 @@ struct WelcomeScreen: View {
     // MARK: - Animated Background
     private var animatedBackground: some View {
         ZStack {
-            // Base gradient
-            LinearGradient(
-                colors: [
-                    Color.bwSurface,
-                    Color.bwBackgroundPeach,
-                    Color.bwSurface.opacity(0.9)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Base gradient - adaptive
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    LinearGradient(
+                        colors: [
+                            Color.bwSurface,
+                            Color.bwBackgroundPeach,
+                            Color.bwSurface.opacity(0.9)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+            }
             .ignoresSafeArea()
             
             // Animated floating shapes
