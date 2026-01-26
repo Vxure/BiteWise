@@ -8,6 +8,8 @@ struct MacroGoalsEditorSheet: View {
     var onSave: (() -> Void)?
     var onCancel: (() -> Void)?
     
+    @Environment(\.colorScheme) var colorScheme
+    
     // Local editing state
     @State private var calories: Double = 2000
     @State private var proteinPercent: Double = 30
@@ -70,8 +72,14 @@ struct MacroGoalsEditorSheet: View {
         }
         .background {
             if isSheet {
-                BWGradients.backgroundGradient
-                    .ignoresSafeArea()
+                Group {
+                    if colorScheme == .dark {
+                        Color(.systemBackground)
+                    } else {
+                        BWGradients.backgroundGradient
+                    }
+                }
+                .ignoresSafeArea()
             }
         }
         .onAppear {
@@ -475,7 +483,7 @@ struct MacroGoalsEditorSheet: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
-            .background(Color.bwSurface)
+            .background(colorScheme == .dark ? Color(.systemBackground) : Color.bwSurface)
         }
     }
     

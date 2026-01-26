@@ -227,172 +227,93 @@ class SessionContext: ObservableObject {
     
     /// Build a context string that gives the chatbot full awareness of the session
     /// This includes detected ingredients, generated recipes, and user preferences
+    /// Optimized for minimal token usage while retaining essential context
     func buildChatContext(userProfile: UserProfile) -> String {
-        // Concise macro info based on whether user has set goals (using grams for actionable targets)
-        let macroText: String
+        let dataManager = DataManager.shared
+        var parts: [String] = []
+        
+        // Core identity (minimal)
+        parts.append("BiteWise cooking assistant. Help with recipes, cooking tips, substitutions.")
+        
+        // User profile (compact format)
+        var userParts: [String] = []
+        if !userProfile.name.isEmpty { userParts.append("Name: \(userProfile.name)") }
+        if !userProfile.allergies.isEmpty { userParts.append("ALLERGIES (avoid): \(userProfile.allergies.joined(separator: ", "))") }
+        if !userProfile.dietaryPreferences.isEmpty { userParts.append("Prefs: \(userProfile.dietaryPreferences.joined(separator: ", "))") }
+        
+        // Macro goals (compact)
         if userProfile.hasMacroGoals {
             let cal = userProfile.macroGoals.dailyCalories
             let proteinG = Int((Double(cal) * userProfile.macroGoals.proteinPercentage / 100) / 4)
-            let carbsG = Int((Double(cal) * userProfile.macroGoals.carbsPercentage / 100) / 4)
-            let fatsG = Int((Double(cal) * userProfile.macroGoals.fatsPercentage / 100) / 9)
-            macroText = "\(cal)cal/\(proteinG)gP/\(carbsG)gC/\(fatsG)gF daily"
-        } else {
-            macroText = "No specific goals"
+            userParts.append("Goals: \(cal)cal/\(proteinG)gP daily")
         }
         
-        var context = """
-        You are a helpful cooking assistant for the BiteWise app. You help users with recipes, cooking tips, and ingredient substitutions.
+        if !userParts.isEmpty {
+            parts.append("USER: " + userParts.joined(separator: " | "))
+        }
         
-        USER PROFILE:
-        - Name: \(userProfile.name)
-        - Dietary Preferences: \(userProfile.dietaryPreferences.joined(separator: ", "))
-        - Allergies: \(userProfile.allergies.joined(separator: ", "))
-        - Macros: \(macroText)
-        
-        """
-        
-        // Add today's consumed macros if user has been tracking
-        let dataManager = DataManager.shared
+        // Today's consumption (only if tracking)
         let todayMacros = dataManager.dailyMacros
-        let goals = dataManager.macroGoalsInGrams
-        
         if todayMacros.caloriesConsumed > 0 {
+            let goals = dataManager.macroGoalsInGrams
             let calRemaining = max(0, goals.calories - todayMacros.caloriesConsumed)
-            let proteinRemaining = max(0, goals.protein - Int(todayMacros.proteinConsumed))
-            let carbsRemaining = max(0, goals.carbs - Int(todayMacros.carbsConsumed))
-            let fatsRemaining = max(0, goals.fats - Int(todayMacros.fatsConsumed))
-            
-            context += """
-            
-            TODAY'S CONSUMPTION:
-            - Consumed: \(todayMacros.caloriesConsumed) cal, \(Int(todayMacros.proteinConsumed))g protein, \(Int(todayMacros.carbsConsumed))g carbs, \(Int(todayMacros.fatsConsumed))g fat
-            - Remaining: ~\(calRemaining) cal, ~\(proteinRemaining)g protein, ~\(carbsRemaining)g carbs, ~\(fatsRemaining)g fat
-            - Consider suggesting lighter meals if close to daily limit.
-            
-            """
+            parts.append("TODAY: \(todayMacros.caloriesConsumed)cal consumed, ~\(calRemaining)cal remaining")
         }
         
-        // Add favorite recipes for personalization
-        if dataManager.hasFavorites {
-            let favoriteNames = dataManager.favoriteRecipes.prefix(5).map { $0.title }
-            context += """
-            
-            USER'S FAVORITE RECIPES:
-            \(favoriteNames.map { "- \($0)" }.joined(separator: "\n"))
-            Consider suggesting variations of these or similar cuisines.
-            
-            """
-        }
-        
-        // Add recent feedback for learning (focus on low-rated recipes to avoid)
-        let recentFeedback = dataManager.recipeFeedback.suffix(10)
-        let lowRated = recentFeedback.filter { $0.rating <= 2 }
-        let highRated = recentFeedback.filter { $0.rating >= 4 }
-        
-        if !lowRated.isEmpty {
-            context += """
-            
-            RECIPES USER DIDN'T ENJOY:
-            \(lowRated.map { "- \($0.recipeName) (rated \($0.rating)/5)" }.joined(separator: "\n"))
-            Avoid suggesting similar recipes.
-            
-            """
-        }
-        
-        if !highRated.isEmpty {
-            context += """
-            
-            RECIPES USER ENJOYED:
-            \(highRated.map { "- \($0.recipeName) (rated \($0.rating)/5)" }.joined(separator: "\n"))
-            Consider suggesting similar styles.
-            
-            """
-        }
-        
-        // Add pantry staples (always available)
-        let pantryItems = dataManager.pantryItems.map { $0.name }
-        if !pantryItems.isEmpty {
-            context += """
-            
-            PANTRY STAPLES (always available):
-            \(pantryItems.map { "- \($0)" }.joined(separator: "\n"))
-            
-            """
-        }
-        
-        // Add persisted fridge items (from previous scans)
-        if dataManager.hasFridgeItems {
-            let fridgeTimeAgo = dataManager.lastFridgeScanTimeAgo ?? "unknown"
-            let fridgeItemsList = dataManager.fridgeItems.map { item -> String in
-                if item.quantity.isEmpty {
-                    return "- \(item.name)"
-                } else {
-                    return "- \(item.name) (\(item.quantity))"
-                }
-            }.joined(separator: "\n")
-            
-            context += """
-            
-            FRIDGE ITEMS (scanned \(fridgeTimeAgo)):
-            \(fridgeItemsList)
-            Note: These items may need freshness verification if scanned more than a few days ago.
-            
-            """
-        }
-        
-        // Add detected ingredients from current session if available (overrides fridge items for current session)
+        // Available ingredients (prioritized: selected > detected > fridge)
         if !selectedIngredientNames.isEmpty {
-            context += """
-            
-            CURRENTLY SELECTED INGREDIENTS (from active scan session):
-            \(selectedIngredientNames.map { "- \($0)" }.joined(separator: "\n"))
-            
-            """
+            parts.append("INGREDIENTS: \(selectedIngredientNames.joined(separator: ", "))")
         } else if !detectedIngredients.isEmpty {
-            context += """
-            
-            CURRENTLY DETECTED INGREDIENTS (from active scan session):
-            \(detectedIngredients.map { "- \($0.name) (\($0.quantity))" }.joined(separator: "\n"))
-            
-            """
+            parts.append("INGREDIENTS: \(detectedIngredients.map { $0.name }.joined(separator: ", "))")
+        } else if dataManager.hasFridgeItems {
+            let items = dataManager.fridgeItems.prefix(15).map { $0.name }.joined(separator: ", ")
+            parts.append("FRIDGE: \(items)")
         }
         
-        // Add generated recipes if available
-        if !generatedRecipes.isEmpty {
-            context += """
-            
-            RECIPES SUGGESTED TO USER:
-            \(generatedRecipes.map { "- \($0.title): \($0.description)" }.joined(separator: "\n"))
-            
-            """
+        // Pantry (compact)
+        if !dataManager.pantryItems.isEmpty {
+            let pantry = dataManager.pantryItems.prefix(10).map { $0.name }.joined(separator: ", ")
+            parts.append("PANTRY: \(pantry)")
         }
         
-        // Add current recipe context if user is discussing a specific recipe
+        // Favorites (just names, limited)
+        if dataManager.hasFavorites {
+            let favs = dataManager.favoriteRecipes.prefix(3).map { $0.title }.joined(separator: ", ")
+            parts.append("FAVORITES: \(favs)")
+        }
+        
+        // Feedback (only low-rated, compact)
+        let lowRated = dataManager.recipeFeedback.suffix(5).filter { $0.rating <= 2 }
+        if !lowRated.isEmpty {
+            let avoid = lowRated.map { $0.recipeName }.joined(separator: ", ")
+            parts.append("AVOID (disliked): \(avoid)")
+        }
+        
+        // Current recipe context (essential info only)
         if let recipe = currentRecipeContext {
-            context += """
-            
-            CURRENTLY DISCUSSING RECIPE: \(recipe.title)
-            Description: \(recipe.description)
+            parts.append("""
+            CURRENT RECIPE: \(recipe.title)
             Ingredients: \(recipe.ingredients.joined(separator: ", "))
-            Steps: \(recipe.steps.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: " "))
-            Prep Time: \(recipe.prepTime) min, Cook Time: \(recipe.cookTime) min
-            Nutrition: \(recipe.macros.calories) cal, \(Int(recipe.macros.protein))g protein, \(Int(recipe.macros.carbs))g carbs, \(Int(recipe.macros.fats))g fat
-            
-            The user wants to modify or get help with this specific recipe.
-            """
+            \(recipe.macros.calories)cal | \(Int(recipe.macros.protein))gP
+            """)
         }
         
-        context += """
+        // Suggested recipes (just titles)
+        if !generatedRecipes.isEmpty {
+            let titles = generatedRecipes.map { $0.title }.joined(separator: ", ")
+            parts.append("SUGGESTED: \(titles)")
+        }
         
-        INSTRUCTIONS:
-        - Be helpful, friendly, and concise
-        - Consider the user's dietary preferences and allergies in all suggestions
-        - If asked about recipes, reference the ingredients they have available
-        - Provide cooking tips and substitution ideas when relevant
-        - Keep responses focused and practical
-        """
+        // Instructions (minimal)
+        parts.append("""
+        RULES: Be concise. Respect allergies. Use available ingredients.
         
-        return context
+        RECIPE GENERATION: When user wants a recipe, include [GENERATE_RECIPE: description] marker.
+        Examples: [GENERATE_RECIPE: quick dinner under 30min] or [GENERATE_RECIPE: dairy-free version]
+        Add brief intro text before/after marker. Marker is auto-removed from display.
+        """)
+        
+        return parts.joined(separator: "\n\n")
     }
     
     // MARK: - Convenience Methods

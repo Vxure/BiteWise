@@ -169,7 +169,7 @@ struct MiniRecipeCard: View {
                 }
             }
             .padding(14)
-            .frame(width: 200)
+            .frame(width: 240)
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color(.tertiarySystemBackground))

@@ -177,28 +177,6 @@ struct RecipeAIIntroView: View {
         
         // Call Gemini API
         Task {
-            // DEMO TRIGGER: If user types "show recipe", show a dummy recipe card
-            if userText.lowercased().contains("show recipe") {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1s delay
-                await MainActor.run {
-                    isTyping = false
-                    let botMessage = ChatMessage(text: "Here's a great recipe for you to try:", isUser: false)
-                    sessionContext.addMessageToActiveSession(botMessage)
-                    let recipeMessage = ChatMessage(recipe: Recipe.dummyData[0], isUser: false)
-                    sessionContext.addMessageToActiveSession(recipeMessage)
-                    
-                    // Scroll to new message
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if let lastMessage = sessionContext.activeChatSession?.messages.last {
-                            withAnimation {
-                                scrollProxy?.scrollTo(lastMessage.id, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
-                return
-            }
-            
             do {
                 let response = try await GeminiService.shared.chat(
                     message: userText,
@@ -206,18 +184,61 @@ struct RecipeAIIntroView: View {
                     userProfile: dataManager.userProfile
                 )
                 
-                await MainActor.run {
-                    isTyping = false
-                    let botMessage = ChatMessage(text: response, isUser: false)
-                    sessionContext.addMessageToActiveSession(botMessage)
+                // Check if response contains a recipe generation marker
+                if GeminiService.shared.containsRecipeMarker(response) {
+                    // Extract recipe description and clean the response text
+                    let recipeDescription = GeminiService.shared.extractRecipeDescription(from: response) ?? "recipe based on user request"
+                    let cleanedResponse = GeminiService.shared.cleanRecipeMarker(from: response)
                     
-                    // Scroll to new message
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if let lastMessage = sessionContext.activeChatSession?.messages.last {
-                            withAnimation {
-                                scrollProxy?.scrollTo(lastMessage.id, anchor: .bottom)
-                            }
+                    // Add the text message first (if not empty)
+                    if !cleanedResponse.isEmpty {
+                        await MainActor.run {
+                            let botMessage = ChatMessage(text: cleanedResponse, isUser: false)
+                            sessionContext.addMessageToActiveSession(botMessage)
                         }
+                    }
+                    
+                    // Generate the recipe
+                    do {
+                        let recipe = try await GeminiService.shared.generateRecipeFromChat(
+                            description: recipeDescription,
+                            context: sessionContext,
+                            userProfile: dataManager.userProfile
+                        )
+                        
+                        await MainActor.run {
+                            isTyping = false
+                            // Add the recipe card message
+                            let recipeMessage = ChatMessage(recipe: recipe, isUser: false)
+                            sessionContext.addMessageToActiveSession(recipeMessage)
+                            
+                            // Update current recipe context for follow-up modifications
+                            sessionContext.setCurrentRecipe(recipe)
+                            
+                            // Track generated recipe in history for persistence
+                            dataManager.addRecipeToHistory(recipe)
+                            
+                            // Scroll to new message
+                            scrollToLastMessage()
+                        }
+                    } catch {
+                        await MainActor.run {
+                            isTyping = false
+                            let errorMessage = ChatMessage(
+                                text: "I had trouble generating that recipe. Could you try rephrasing your request?",
+                                isUser: false
+                            )
+                            sessionContext.addMessageToActiveSession(errorMessage)
+                            scrollToLastMessage()
+                        }
+                    }
+                } else {
+                    // Regular text response without recipe
+                    await MainActor.run {
+                        isTyping = false
+                        let botMessage = ChatMessage(text: response, isUser: false)
+                        sessionContext.addMessageToActiveSession(botMessage)
+                        scrollToLastMessage()
                     }
                 }
             } catch {
@@ -228,6 +249,17 @@ struct RecipeAIIntroView: View {
                         isUser: false
                     )
                     sessionContext.addMessageToActiveSession(errorMessage)
+                }
+            }
+        }
+    }
+    
+    /// Helper to scroll to the last message in the chat
+    private func scrollToLastMessage() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let lastMessage = sessionContext.activeChatSession?.messages.last {
+                withAnimation {
+                    scrollProxy?.scrollTo(lastMessage.id, anchor: .bottom)
                 }
             }
         }

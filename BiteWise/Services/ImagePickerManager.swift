@@ -197,7 +197,16 @@ struct ImageSourceSheet: View {
                 Spacer()
             }
             .padding(.horizontal, 20)
-            .background(BWGradients.backgroundGradient.ignoresSafeArea())
+            .background(
+                Group {
+                    if colorScheme == .dark {
+                        Color(.systemBackground)
+                    } else {
+                        BWGradients.backgroundGradient
+                    }
+                }
+                .ignoresSafeArea()
+            )
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cancel") {
