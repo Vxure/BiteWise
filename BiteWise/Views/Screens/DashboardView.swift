@@ -11,9 +11,11 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 struct DashboardView: View {
     @EnvironmentObject private var navigationState: AppNavigationState
     @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var authService = AuthService.shared
     @Environment(\.colorScheme) var colorScheme
     @State private var isVisible = false
     @AppStorage("hasSeenWelcomeHint") private var hasSeenWelcomeHint: Bool = false
+    @State private var hasLoadedFromCloud = false
     
     // Scroll tracking state for fading header
     @State private var scrollOffset: CGFloat = 0
@@ -179,6 +181,30 @@ struct DashboardView: View {
         .onAppear {
             isVisible = true
         }
+        .task {
+            // Load data from cloud if authenticated and haven't loaded yet
+            if authService.isAuthenticated && !hasLoadedFromCloud {
+                hasLoadedFromCloud = true
+                await dataManager.loadFromCloud()
+            }
+        }
+        .overlay(alignment: .top) {
+            // Show sync error banner if there's an error
+            if let error = dataManager.syncError {
+                BWErrorBanner(
+                    message: error,
+                    onDismiss: { dataManager.clearSyncError() },
+                    onRetry: {
+                        Task {
+                            await dataManager.loadFromCloud()
+                        }
+                    }
+                )
+                .padding(.top, 60)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.syncError)
     }
     
     // MARK: - Scroll Handling
@@ -217,6 +243,11 @@ struct DashboardView: View {
         HStack {
             Text("Dashboard")
                 .font(BWTypography.sectionHeader)
+            
+            // Show sync status if authenticated
+            if authService.isAuthenticated {
+                BWSyncStatusIndicator()
+            }
             
             Spacer()
             

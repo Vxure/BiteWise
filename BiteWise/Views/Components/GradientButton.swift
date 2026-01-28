@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct GradientButton: View {
-    var icon: String
+    var icon: String?
     var text: String
     var action: () -> Void
     @State private var isPressed = false
@@ -13,9 +13,11 @@ struct GradientButton: View {
             action()
         }) {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.white)
+                if let icon = icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                }
                 
                 Text(text)
                     .font(BWTypography.buttonLabel)

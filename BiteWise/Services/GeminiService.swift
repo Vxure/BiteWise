@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import os.log
 
 // MARK: - Gemini API Error Types
 
@@ -66,6 +67,7 @@ class GeminiService {
     // MARK: - Properties
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models"
     private let session = URLSession.shared
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BiteWise", category: "GeminiService")
     
     private init() {}
     
@@ -77,13 +79,13 @@ class GeminiService {
     func analyzeImage(_ image: UIImage) async throws -> [DetectedIngredient] {
         // SAFETY CHECK: Demo mode bypass
         guard AppSettings.shared.shouldUseRealAPI else {
-            print("📋 Demo Mode: Returning dummy ingredients (no API call)")
+            logger.debug("Demo Mode: Returning dummy ingredients")
             // Simulate network delay for realistic UX
             try await Task.sleep(nanoseconds: 1_500_000_000)
             return DetectedIngredient.dummyData
         }
         
-        print("🌐 Live Mode: Calling Gemini Vision API...")
+        logger.info("Calling Gemini Vision API for ingredient detection")
         
         // Convert image to base64
         guard let imageData = image.jpegData(compressionQuality: 0.8) else {
@@ -142,12 +144,12 @@ class GeminiService {
     func generateRecipes(ingredients: [String], pantryItems: [String], userProfile: UserProfile) async throws -> [Recipe] {
         // SAFETY CHECK: Demo mode bypass
         guard AppSettings.shared.shouldUseRealAPI else {
-            print("📋 Demo Mode: Returning dummy recipes (no API call)")
+            logger.debug("Demo Mode: Returning dummy recipes")
             try await Task.sleep(nanoseconds: 2_000_000_000)
             return Array(Recipe.dummyData.prefix(5))
         }
         
-        print("🌐 Live Mode: Calling Gemini API for recipe generation...")
+        logger.info("Calling Gemini API for recipe generation")
         
         // Build compact user context
         let allergiesText = userProfile.allergies.isEmpty ? "None" : userProfile.allergies.joined(separator: ", ")
@@ -210,12 +212,12 @@ class GeminiService {
     func chat(message: String, context: SessionContext, userProfile: UserProfile) async throws -> String {
         // SAFETY CHECK: Demo mode bypass
         guard AppSettings.shared.shouldUseRealAPI else {
-            print("📋 Demo Mode: Returning mock chat response (no API call)")
+            logger.debug("Demo Mode: Returning mock chat response")
             try await Task.sleep(nanoseconds: 1_000_000_000)
             return generateMockChatResponse(for: message, context: context, userProfile: userProfile)
         }
         
-        print("🌐 Live Mode: Calling Gemini API for chat...")
+        logger.info("Calling Gemini API for chat")
         
         // Build system context
         let systemContext = context.buildChatContext(userProfile: userProfile)
@@ -287,12 +289,12 @@ class GeminiService {
     ) async throws -> Recipe {
         // SAFETY CHECK: Demo mode bypass
         guard AppSettings.shared.shouldUseRealAPI else {
-            print("📋 Demo Mode: Returning generated demo recipe (no API call)")
+            logger.debug("Demo Mode: Returning generated demo recipe")
             try await Task.sleep(nanoseconds: 1_000_000_000)
             return generateMockRecipeFromChat(description: description, context: context, userProfile: userProfile, baseRecipe: baseRecipe)
         }
         
-        print("🌐 Live Mode: Calling Gemini API for chat recipe generation...")
+        logger.info("Calling Gemini API for chat recipe generation")
         
         // Build compact user context
         let allergiesText = userProfile.allergies.isEmpty ? "None" : userProfile.allergies.joined(separator: ", ")

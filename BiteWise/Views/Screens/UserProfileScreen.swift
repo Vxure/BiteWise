@@ -6,7 +6,9 @@ struct UserProfileScreen: View {
     @State private var newAllergy = ""
     @State private var showMacroEditor = false
     @State private var isEditingName = false
+    @State private var isSaving = false
     @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var authService = AuthService.shared
     @Environment(\.colorScheme) var colorScheme
     @FocusState private var isPreferenceFocused: Bool
     @FocusState private var isAllergyFocused: Bool
@@ -45,10 +47,12 @@ struct UserProfileScreen: View {
                     
                     // MARK: - Save Button
                     GradientButton(
-                        icon: "checkmark.circle.fill",
-                        text: "Save Profile",
+                        icon: isSaving ? nil : "checkmark.circle.fill",
+                        text: isSaving ? "Saving..." : "Save Profile",
                         action: saveAndDone
                     )
+                    .disabled(isSaving)
+                    .opacity(isSaving ? 0.7 : 1.0)
                     .padding(.top, 8)
                     .staggeredAppear(index: 4)
                 }
@@ -86,6 +90,31 @@ struct UserProfileScreen: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.hidden)
         }
+        .overlay(alignment: .top) {
+            VStack(spacing: 8) {
+                // Show sync status if authenticated
+                if authService.isAuthenticated {
+                    BWSyncStatusIndicator()
+                        .padding(.top, 60)
+                }
+                
+                // Show sync error if present
+                if let error = dataManager.syncError {
+                    BWErrorBanner(
+                        message: error,
+                        onDismiss: { dataManager.clearSyncError() },
+                        onRetry: {
+                            Task {
+                                await dataManager.loadFromCloud()
+                            }
+                        }
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.syncError)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.isSyncing)
     }
     
     // MARK: - Profile Header Section
@@ -631,9 +660,16 @@ struct UserProfileScreen: View {
     /// Save profile to DataManager and dismiss
     private func saveAndDone() {
         BWHaptics.success()
+        isSaving = true
+        
         dataManager.userProfile = profile
         dataManager.saveUserProfile()
-        onDone()
+        
+        // Give a moment for the sync to start, then dismiss
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            isSaving = false
+            onDone()
+        }
     }
     
     private func addPreference() {

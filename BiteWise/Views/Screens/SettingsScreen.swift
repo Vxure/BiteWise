@@ -1,4 +1,5 @@
 import SwiftUI
+import os.log
 
 // MARK: - Scroll Offset Preference Key
 private struct SettingsScrollOffsetPreferenceKey: PreferenceKey {
@@ -173,6 +174,18 @@ struct SettingsView: View {
                             navigationState.navigateTo(.feedback)
                         }
                     }
+                    
+                    // Account Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Account")
+                            .font(.bwCaption())
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                            .padding(.leading, 4)
+                        
+                        LogOutButton()
+                    }
+                    .padding(.top, 8)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 100)
@@ -699,6 +712,119 @@ struct SettingsRow: View {
                 .onChanged { _ in isPressed = true }
                 .onEnded { _ in isPressed = false }
         )
+    }
+}
+
+// MARK: - Account Button (Sign In for guests, Log Out for authenticated users)
+struct AccountButton: View {
+    // Privacy-safe logger
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BiteWise", category: "Settings")
+    
+    @ObservedObject private var authService = AuthService.shared
+    @ObservedObject private var guestModeService = GuestModeService.shared
+    @AppStorage("isGuestMode") private var isGuestMode: Bool = false
+    @State private var isLoading = false
+    @State private var showLogoutConfirmation = false
+    @Environment(\.colorScheme) var colorScheme
+    
+    private var isGuest: Bool {
+        !authService.isAuthenticated && isGuestMode
+    }
+    
+    var body: some View {
+        Button {
+            if isGuest {
+                // Guest wants to sign in - disable guest mode to show auth screen
+                BWHaptics.lightImpact()
+                isGuestMode = false
+                guestModeService.disableGuestMode()
+            } else {
+                // Authenticated user wants to log out
+                showLogoutConfirmation = true
+            }
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isGuest ? Color.bwPrimary.opacity(0.15) : Color.bwError.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.bwError))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: isGuest ? "person.crop.circle.badge.plus" : "rectangle.portrait.and.arrow.right")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(isGuest ? Color.bwPrimary : Color.bwError)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isGuest ? "Sign In" : "Log Out")
+                        .font(.bwBody())
+                        .foregroundColor(isGuest ? Color.bwPrimary : Color.bwError)
+                    
+                    if isGuest {
+                        Text("Create an account to save your data")
+                            .font(.bwCaption())
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                if isGuest {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .disabled(isLoading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
+        .confirmationDialog(
+            "Log Out",
+            isPresented: $showLogoutConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Log Out", role: .destructive) {
+                performLogout()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to log out?")
+        }
+    }
+    
+    private func performLogout() {
+        isLoading = true
+        BWHaptics.mediumImpact()
+        
+        Task {
+            do {
+                try await AuthService.shared.signOut()
+                // Also clear guest mode on logout - sync both @AppStorage and service state
+                isGuestMode = false
+                guestModeService.disableGuestMode()
+                // AuthService will update isAuthenticated, triggering navigation
+            } catch {
+                BWHaptics.error()
+                Self.logger.error("Logout error: \(error.localizedDescription, privacy: .public)")
+            }
+            isLoading = false
+        }
+    }
+}
+
+// MARK: - Legacy Log Out Button (keeping for compatibility)
+struct LogOutButton: View {
+    var body: some View {
+        AccountButton()
     }
 }
 

@@ -3,6 +3,7 @@ import SwiftUI
 struct FavoritesScreen: View {
     @EnvironmentObject private var navigationState: AppNavigationState
     @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var authService = AuthService.shared
     @Environment(\.colorScheme) var colorScheme
     @State private var isVisible = false
     
@@ -65,6 +66,29 @@ struct FavoritesScreen: View {
         .onAppear {
             isVisible = true
         }
+        .refreshable {
+            // Pull to refresh from cloud
+            if authService.isAuthenticated {
+                await dataManager.loadFromCloud()
+            }
+        }
+        .overlay(alignment: .top) {
+            // Show sync error if present
+            if let error = dataManager.syncError {
+                BWErrorBanner(
+                    message: error,
+                    onDismiss: { dataManager.clearSyncError() },
+                    onRetry: {
+                        Task {
+                            await dataManager.loadFromCloud()
+                        }
+                    }
+                )
+                .padding(.top, 60)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.syncError)
     }
     
     private var emptyStateView: some View {

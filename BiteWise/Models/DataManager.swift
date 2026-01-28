@@ -1,10 +1,15 @@
 import Foundation
 import SwiftUI
+import os.log
 
-// MARK: - Data Manager for Local Persistence
+// MARK: - Data Manager for Local Persistence with Cloud Sync
 class DataManager: ObservableObject {
     static let shared = DataManager()
     
+    // MARK: - Privacy-Safe Logger
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BiteWise", category: "DataManager")
+    
+    // MARK: - Published Data Properties
     @Published var userProfile: UserProfile
     @Published var pantryItems: [Ingredient]
     @Published var recipeHistory: [Recipe]
@@ -21,6 +26,12 @@ class DataManager: ObservableObject {
     @Published var macroHistory: [DailyMacroLog]
     @Published var recipeFeedback: [RecipeFeedback]
     @Published var chatSessions: [ChatSession]
+    
+    // MARK: - Sync State Properties
+    @Published var isSyncing: Bool = false
+    @Published var syncError: String?
+    @Published var lastSyncDate: Date?
+    @Published var isLoadingFromCloud: Bool = false
     
     private let userProfileKey = "userProfile"
     private let pantryItemsKey = "pantryItems"
@@ -76,6 +87,8 @@ class DataManager: ObservableObject {
         if let encoded = try? JSONEncoder().encode(userProfile) {
             UserDefaults.standard.set(encoded, forKey: userProfileKey)
         }
+        // Sync to cloud in background
+        syncUserProfileToCloud()
     }
     
     private static func loadUserProfile() -> UserProfile? {
@@ -128,11 +141,17 @@ class DataManager: ObservableObject {
         
         // Log activity
         logActivity(.addedPantryItem(item))
+        
+        // Sync to cloud in background
+        syncPantryItemToCloud(item)
     }
     
     func removePantryItem(_ item: Ingredient) {
         pantryItems.removeAll { $0.id == item.id }
         savePantryItems()
+        
+        // Sync deletion to cloud in background
+        syncPantryItemDeletionToCloud(item.id)
     }
     
     // MARK: - Recipe History
@@ -165,6 +184,8 @@ class DataManager: ObservableObject {
         if let encoded = try? JSONEncoder().encode(dailyMacros) {
             UserDefaults.standard.set(encoded, forKey: dailyMacrosKey)
         }
+        // Sync to cloud in background
+        syncDailyMacrosToCloud()
     }
     
     private static func loadDailyMacros() -> DailyMacroLog? {
@@ -524,6 +545,9 @@ class DataManager: ObservableObject {
         
         // Log activity
         logActivity(.addedFridgeItem(item))
+        
+        // Sync to cloud in background
+        syncFridgeItemToCloud(item)
     }
     
     /// Add multiple fridge items at once (e.g., from a scan)
@@ -551,12 +575,18 @@ class DataManager: ObservableObject {
     func removeFridgeItem(_ item: FridgeItem) {
         fridgeItems.removeAll { $0.id == item.id }
         saveFridgeItems()
+        
+        // Sync deletion to cloud in background
+        syncFridgeItemDeletionToCloud(item.id)
     }
     
     /// Remove fridge item by ID
     func removeFridgeItem(withId id: UUID) {
         fridgeItems.removeAll { $0.id == id }
         saveFridgeItems()
+        
+        // Sync deletion to cloud in background
+        syncFridgeItemDeletionToCloud(id)
     }
     
     /// Clear all fridge items
@@ -565,6 +595,12 @@ class DataManager: ObservableObject {
         lastFridgeScanDate = nil
         saveFridgeItems()
         UserDefaults.standard.removeObject(forKey: lastFridgeScanDateKey)
+        
+        // Sync to cloud in background
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            try? await SupabaseDataService.shared.deleteAllFridgeItems()
+        }
     }
     
     /// Clear expired fridge items based on app settings
@@ -760,6 +796,9 @@ class DataManager: ObservableObject {
         }
         
         saveActivityLog()
+        
+        // Sync to cloud in background
+        syncActivityToCloud(activity)
     }
     
     /// Get the most recent activities
@@ -801,6 +840,8 @@ class DataManager: ObservableObject {
     
     /// Toggle favorite status for a recipe
     func toggleFavorite(_ recipe: Recipe) {
+        let wasFavorite = favoriteRecipes.contains { $0.id == recipe.id }
+        
         if let index = favoriteRecipes.firstIndex(where: { $0.id == recipe.id }) {
             favoriteRecipes.remove(at: index)
         } else {
@@ -808,6 +849,9 @@ class DataManager: ObservableObject {
             logActivity(.favoritedRecipe(recipe))
         }
         saveFavoriteRecipes()
+        
+        // Sync to cloud in background (now it's the opposite state)
+        syncFavoriteToCloud(recipe, isFavorite: !wasFavorite)
     }
     
     /// Add a recipe to favorites
@@ -816,6 +860,9 @@ class DataManager: ObservableObject {
             favoriteRecipes.append(recipe)
             logActivity(.favoritedRecipe(recipe))
             saveFavoriteRecipes()
+            
+            // Sync to cloud in background
+            syncFavoriteToCloud(recipe, isFavorite: true)
         }
     }
     
@@ -823,6 +870,9 @@ class DataManager: ObservableObject {
     func removeFavorite(_ recipe: Recipe) {
         favoriteRecipes.removeAll { $0.id == recipe.id }
         saveFavoriteRecipes()
+        
+        // Sync to cloud in background
+        syncFavoriteToCloud(recipe, isFavorite: false)
     }
     
     /// Check if there are any favorites
@@ -1114,6 +1164,9 @@ class DataManager: ObservableObject {
         
         // Log activity
         logActivity(.submittedFeedback(feedback))
+        
+        // Sync to cloud in background
+        syncRecipeFeedbackToCloud(feedback)
     }
     
     /// Get feedback for a specific recipe
@@ -1124,6 +1177,346 @@ class DataManager: ObservableObject {
     /// Check if a recipe has feedback
     func hasFeedback(for recipeId: UUID) -> Bool {
         recipeFeedback.contains { $0.recipeId == recipeId }
+    }
+    
+    // MARK: - Cloud Sync
+    
+    /// Check if cloud sync should be performed (must be called from MainActor context)
+    @MainActor
+    private func checkShouldSyncToCloud() -> Bool {
+        GuestModeService.shared.shouldSyncToCloud()
+    }
+    
+    /// Sync a fridge item to the cloud (background)
+    private func syncFridgeItemToCloud(_ item: FridgeItem) {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                _ = try await SupabaseDataService.shared.addFridgeItem(item)
+            } catch {
+                self.logger.error("Failed to sync fridge item to cloud: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync deletion of a fridge item to the cloud (background)
+    private func syncFridgeItemDeletionToCloud(_ itemId: UUID) {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                try await SupabaseDataService.shared.deleteFridgeItem(itemId)
+            } catch {
+                self.logger.error("Failed to sync fridge item deletion: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync a pantry item to the cloud (background)
+    private func syncPantryItemToCloud(_ item: Ingredient) {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                _ = try await SupabaseDataService.shared.addPantryItem(item)
+            } catch {
+                self.logger.error("Failed to sync pantry item to cloud: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync deletion of a pantry item to the cloud (background)
+    private func syncPantryItemDeletionToCloud(_ itemId: UUID) {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                try await SupabaseDataService.shared.deletePantryItem(itemId)
+            } catch {
+                self.logger.error("Failed to sync pantry item deletion: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync user profile to the cloud (background)
+    private func syncUserProfileToCloud() {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                let profileUpdate = ProfileUpdateDTO(name: self.userProfile.name)
+                try await SupabaseDataService.shared.updateProfile(profileUpdate)
+                
+                let preferencesUpdate = UserPreferencesUpdateDTO(
+                    dietaryPreferences: self.userProfile.dietaryPreferences,
+                    allergies: self.userProfile.allergies,
+                    dailyCalories: self.userProfile.macroGoals.dailyCalories,
+                    proteinPercentage: self.userProfile.macroGoals.proteinPercentage,
+                    carbsPercentage: self.userProfile.macroGoals.carbsPercentage,
+                    fatsPercentage: self.userProfile.macroGoals.fatsPercentage,
+                    hasMacroGoals: self.userProfile.hasMacroGoals
+                )
+                try await SupabaseDataService.shared.updateUserPreferences(preferencesUpdate)
+            } catch {
+                self.logger.error("Failed to sync user profile: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync favorite toggle to the cloud (background)
+    private func syncFavoriteToCloud(_ recipe: Recipe, isFavorite: Bool) {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                if isFavorite {
+                    try await SupabaseDataService.shared.saveRecipeAsFavorite(recipe)
+                } else {
+                    try await SupabaseDataService.shared.removeRecipeFromFavorites(recipe.id)
+                }
+            } catch {
+                self.logger.error("Failed to sync favorite: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync activity to the cloud (background)
+    private func syncActivityToCloud(_ activity: ActivityItem) {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                try await SupabaseDataService.shared.logActivity(activity)
+            } catch {
+                self.logger.error("Failed to sync activity: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync daily macros to the cloud (background)
+    private func syncDailyMacrosToCloud() {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                try await SupabaseDataService.shared.updateDailyMacros(self.dailyMacros)
+            } catch {
+                self.logger.error("Failed to sync daily macros: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    /// Sync recipe feedback to the cloud (background)
+    private func syncRecipeFeedbackToCloud(_ feedback: RecipeFeedback) {
+        Task { @MainActor in
+            guard self.checkShouldSyncToCloud() else { return }
+            do {
+                try await SupabaseDataService.shared.saveRecipeFeedback(feedback)
+            } catch {
+                self.logger.error("Failed to sync recipe feedback: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+    
+    // MARK: - Guest Data Migration
+    
+    /// Key to track if guest data has been migrated for the current user
+    private static let guestDataMigratedKey = "guestDataMigratedForUser"
+    
+    /// Check if this user has already had their guest data migrated
+    private func hasAlreadyMigratedGuestData(for userId: String) -> Bool {
+        let migratedUsers = UserDefaults.standard.stringArray(forKey: DataManager.guestDataMigratedKey) ?? []
+        return migratedUsers.contains(userId)
+    }
+    
+    /// Mark that guest data has been migrated for this user
+    private func markGuestDataAsMigrated(for userId: String) {
+        var migratedUsers = UserDefaults.standard.stringArray(forKey: DataManager.guestDataMigratedKey) ?? []
+        if !migratedUsers.contains(userId) {
+            migratedUsers.append(userId)
+            UserDefaults.standard.set(migratedUsers, forKey: DataManager.guestDataMigratedKey)
+        }
+    }
+    
+    /// Check if there's meaningful local data to migrate
+    private var hasLocalDataToMigrate: Bool {
+        !fridgeItems.isEmpty ||
+        !pantryItems.filter { item in
+            !Ingredient.pantryItems.contains(where: { $0.name == item.name })
+        }.isEmpty ||
+        !favoriteRecipes.isEmpty ||
+        !chatSessions.isEmpty ||
+        dailyMacros.caloriesConsumed > 0 ||
+        !activityLog.isEmpty
+    }
+    
+    /// Migrate local guest data to the cloud on first authentication.
+    /// This should be called BEFORE loadFromCloud() when a guest user creates an account.
+    ///
+    /// The flow:
+    /// 1. Check if user has local data worth migrating
+    /// 2. Push local data UP to the cloud
+    /// 3. Mark migration as complete for this user
+    ///
+    /// After calling this, call loadFromCloud() to merge any existing cloud data.
+    @MainActor
+    func migrateGuestDataOnFirstAuth() async {
+        guard checkShouldSyncToCloud() else { return }
+        
+        // Get current user ID
+        guard let userId = AuthService.shared.currentUser?.id.uuidString else {
+            logger.warning("Cannot migrate: No authenticated user")
+            return
+        }
+        
+        // Skip if already migrated for this user
+        guard !hasAlreadyMigratedGuestData(for: userId) else {
+            logger.info("Guest data already migrated for user")
+            return
+        }
+        
+        // Skip if no meaningful local data
+        guard hasLocalDataToMigrate else {
+            logger.info("No local data to migrate")
+            markGuestDataAsMigrated(for: userId)
+            return
+        }
+        
+        isSyncing = true
+        syncError = nil
+        
+        do {
+            // Push all local data to cloud (this preserves guest data)
+            try await SupabaseDataService.shared.syncAllDataToCloud(
+                profile: userProfile,
+                fridgeItems: fridgeItems,
+                pantryItems: pantryItems,
+                favoriteRecipes: favoriteRecipes,
+                chatSessions: chatSessions,
+                dailyMacros: dailyMacros,
+                activityLog: activityLog
+            )
+            
+            // Mark as migrated so we don't duplicate on next login
+            markGuestDataAsMigrated(for: userId)
+            
+            logger.info("Successfully migrated guest data")
+            
+        } catch {
+            logger.error("Failed to migrate guest data: \(error.localizedDescription, privacy: .public)")
+            syncError = "Failed to migrate your data: \(error.localizedDescription)"
+        }
+        
+        isSyncing = false
+    }
+    
+    // MARK: - Load from Cloud
+    
+    /// Load all data from cloud and merge with local
+    /// Call this after successful authentication.
+    /// If the user was previously a guest, call migrateGuestDataOnFirstAuth() first.
+    @MainActor
+    func loadFromCloud() async {
+        guard checkShouldSyncToCloud() else { return }
+        
+        isLoadingFromCloud = true
+        syncError = nil
+        
+        do {
+            let cloudData = try await SupabaseDataService.shared.loadAllDataFromCloud()
+            
+            // Update profile if cloud has data
+            if let profile = cloudData.profile, let preferences = cloudData.preferences {
+                userProfile = UserProfile(
+                    name: profile.name ?? userProfile.name,
+                    email: profile.email ?? userProfile.email,
+                    dietaryPreferences: preferences.dietaryPreferences,
+                    allergies: preferences.allergies,
+                    macroGoals: UserProfile.MacroGoals(
+                        dailyCalories: preferences.dailyCalories,
+                        proteinPercentage: preferences.proteinPercentage,
+                        carbsPercentage: preferences.carbsPercentage,
+                        fatsPercentage: preferences.fatsPercentage
+                    ),
+                    hasMacroGoals: preferences.hasMacroGoals
+                )
+                saveUserProfile()
+            }
+            
+            // Merge fridge items (cloud wins if there are items)
+            if !cloudData.fridgeItems.isEmpty {
+                fridgeItems = cloudData.fridgeItems.map { $0.toFridgeItem() }
+                saveFridgeItems()
+            }
+            
+            // Merge pantry items (cloud wins if there are items)
+            if !cloudData.pantryItems.isEmpty {
+                pantryItems = cloudData.pantryItems.map { $0.toIngredient() }
+                savePantryItems()
+            }
+            
+            // Merge favorites (cloud wins if there are items)
+            if !cloudData.favoriteRecipes.isEmpty {
+                favoriteRecipes = cloudData.favoriteRecipes.map { $0.toRecipe() }
+                saveFavoriteRecipes()
+            }
+            
+            // Merge chat sessions (cloud wins if there are items)
+            if !cloudData.chatSessions.isEmpty {
+                chatSessions = cloudData.chatSessions.map { $0.toChatSession() }
+                saveChatSessions()
+            }
+            
+            // Merge today's macro log (cloud wins if exists)
+            if let cloudMacros = cloudData.macroLog {
+                dailyMacros = cloudMacros.toDailyMacroLog()
+                saveDailyMacros()
+            }
+            
+            // Merge activity feed (cloud wins if there are items)
+            if !cloudData.activityFeed.isEmpty {
+                activityLog = cloudData.activityFeed.compactMap { $0.toActivityItem() }
+                saveActivityLog()
+            }
+            
+            lastSyncDate = Date()
+            isLoadingFromCloud = false
+            
+        } catch {
+            logger.error("Failed to load from cloud: \(error.localizedDescription, privacy: .public)")
+            syncError = error.localizedDescription
+            isLoadingFromCloud = false
+        }
+    }
+    
+    // MARK: - Sync All to Cloud
+    
+    /// Push all local data to cloud
+    /// Call this after first login to upload existing local data
+    @MainActor
+    func syncAllToCloud() async {
+        guard checkShouldSyncToCloud() else { return }
+        
+        isSyncing = true
+        syncError = nil
+        
+        do {
+            try await SupabaseDataService.shared.syncAllDataToCloud(
+                profile: userProfile,
+                fridgeItems: fridgeItems,
+                pantryItems: pantryItems,
+                favoriteRecipes: favoriteRecipes,
+                chatSessions: chatSessions,
+                dailyMacros: dailyMacros,
+                activityLog: activityLog
+            )
+            
+            lastSyncDate = Date()
+            isSyncing = false
+            
+        } catch {
+            logger.error("Failed to sync all to cloud: \(error.localizedDescription, privacy: .public)")
+            syncError = error.localizedDescription
+            isSyncing = false
+        }
+    }
+    
+    /// Clear sync error
+    func clearSyncError() {
+        syncError = nil
     }
 }
 

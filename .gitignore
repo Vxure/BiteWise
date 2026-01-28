@@ -34,6 +34,10 @@ xcuserdata/
 # IMPORTANT: This file contains API keys and should not be committed
 BiteWise/Services/APIConfiguration.swift
 
+# Secrets configuration file (contains API keys)
+Secrets.xcconfig
+**/Secrets.xcconfig
+
 # Swift Package Manager
 #
 # It's a recommended practice to commit the Package.resolved file, 

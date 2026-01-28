@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		59634D152F287A48005465AF /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 59634D142F287A48005465AF /* Supabase */; };
+		59634D302F29CFFC005465AF /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 59634D2F2F29CFFC005465AF /* Secrets.xcconfig */; };
+		597DBED62F28780400F74652 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 597DBED52F28780400F74652 /* Auth */; };
+		597DBED82F28780400F74652 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 597DBED72F28780400F74652 /* Functions */; };
+		597DBEDA2F28780400F74652 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 597DBED92F28780400F74652 /* PostgREST */; };
+		597DBEDC2F28780400F74652 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 597DBEDB2F28780400F74652 /* Realtime */; };
+		597DBEDE2F28780400F74652 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 597DBEDD2F28780400F74652 /* Storage */; };
 		59D8A57A2F0B8AEB00316A59 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 59D8A5792F0B8AEB00316A59 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
@@ -28,14 +35,28 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		59634D2F2F29CFFC005465AF /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		59CAC8272E00E1290043119A /* BiteWise.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BiteWise.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		59CAC8342E00E12A0043119A /* BiteWiseTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BiteWiseTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		59CAC83E2E00E12A0043119A /* BiteWiseUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BiteWiseUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		59634D242F288434005465AF /* Exceptions for "BiteWise" folder in "BiteWise" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 59CAC8262E00E1290043119A /* BiteWise */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		59CAC8292E00E1290043119A /* BiteWise */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				59634D242F288434005465AF /* Exceptions for "BiteWise" folder in "BiteWise" target */,
+			);
 			path = BiteWise;
 			sourceTree = "<group>";
 		};
@@ -56,6 +77,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				59634D152F287A48005465AF /* Supabase in Frameworks */,
+				597DBEDE2F28780400F74652 /* Storage in Frameworks */,
+				597DBEDA2F28780400F74652 /* PostgREST in Frameworks */,
+				597DBED82F28780400F74652 /* Functions in Frameworks */,
+				597DBED62F28780400F74652 /* Auth in Frameworks */,
+				597DBEDC2F28780400F74652 /* Realtime in Frameworks */,
 				59D8A57A2F0B8AEB00316A59 /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -84,6 +111,7 @@
 				59CAC8372E00E12A0043119A /* BiteWiseTests */,
 				59CAC8412E00E12A0043119A /* BiteWiseUITests */,
 				59CAC8282E00E1290043119A /* Products */,
+				59634D2F2F29CFFC005465AF /* Secrets.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -118,6 +146,12 @@
 			name = BiteWise;
 			packageProductDependencies = (
 				59D8A5792F0B8AEB00316A59 /* MarkdownUI */,
+				597DBED52F28780400F74652 /* Auth */,
+				597DBED72F28780400F74652 /* Functions */,
+				597DBED92F28780400F74652 /* PostgREST */,
+				597DBEDB2F28780400F74652 /* Realtime */,
+				597DBEDD2F28780400F74652 /* Storage */,
+				59634D142F287A48005465AF /* Supabase */,
 			);
 			productName = BiteWise;
 			productReference = 59CAC8272E00E1290043119A /* BiteWise.app */;
@@ -203,6 +237,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				59D8A5782F0B8AEB00316A59 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 59CAC8282E00E1290043119A /* Products */;
@@ -221,6 +256,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				59634D302F29CFFC005465AF /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -401,6 +437,7 @@
 		};
 		59CAC8492E00E12A0043119A /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 59634D2F2F29CFFC005465AF /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -409,6 +446,7 @@
 				DEVELOPMENT_TEAM = CYDAY396XW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BiteWise/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "BiteWise needs camera access to take photos of your fridge contents for ingredient detection.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "BiteWise needs photo library access to select images of your ingredients for recipe suggestions.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -432,6 +470,7 @@
 		};
 		59CAC84A2E00E12A0043119A /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 59634D2F2F29CFFC005465AF /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -440,6 +479,7 @@
 				DEVELOPMENT_TEAM = CYDAY396XW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BiteWise/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "BiteWise needs camera access to take photos of your fridge contents for ingredient detection.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "BiteWise needs photo library access to select images of your ingredients for recipe suggestions.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -575,6 +615,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
 		59D8A5782F0B8AEB00316A59 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui?tab=readme-ov-file";
@@ -586,6 +634,36 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		59634D142F287A48005465AF /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+		597DBED52F28780400F74652 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		597DBED72F28780400F74652 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		597DBED92F28780400F74652 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		597DBEDB2F28780400F74652 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		597DBEDD2F28780400F74652 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 597DBED42F28780400F74652 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
 		59D8A5792F0B8AEB00316A59 /* MarkdownUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 59D8A5782F0B8AEB00316A59 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;

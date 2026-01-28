@@ -11,6 +11,7 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 struct PantryItemsScreen: View {
     @EnvironmentObject private var navigationState: AppNavigationState
     @ObservedObject private var dataManager = DataManager.shared
+    @ObservedObject private var authService = AuthService.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
     @State private var showingAddItemSheet = false
@@ -190,6 +191,29 @@ struct PantryItemsScreen: View {
         } message: {
             Text("This will remove all items from your pantry. This action cannot be undone.")
         }
+        .refreshable {
+            // Pull to refresh from cloud
+            if authService.isAuthenticated {
+                await dataManager.loadFromCloud()
+            }
+        }
+        .overlay(alignment: .top) {
+            // Show sync error if present
+            if let error = dataManager.syncError {
+                BWErrorBanner(
+                    message: error,
+                    onDismiss: { dataManager.clearSyncError() },
+                    onRetry: {
+                        Task {
+                            await dataManager.loadFromCloud()
+                        }
+                    }
+                )
+                .padding(.top, 80)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.syncError)
     }
     
     // MARK: - Scroll Handling

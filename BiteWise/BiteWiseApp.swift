@@ -27,6 +27,13 @@ struct BiteWiseApp: App {
             AppNavigation()
                 .preferredColorScheme(appSettings.appTheme.colorScheme)
                 .environmentObject(appSettings)
+                .onOpenURL { url in
+                    // Handle deep links for email verification
+                    // URL scheme: bitewise://auth
+                    Task {
+                        await AuthService.shared.handleOpenURL(url)
+                    }
+                }
         }
     }
 }

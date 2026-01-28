@@ -1,0 +1,28 @@
+# Supabase Configuration Template for BiteWise
+# Copy this file to config.toml and fill in your project details
+
+[project]
+project_id = "your-project-ref"
+
+[api]
+# Port to run the local API on
+port = 54321
+schemas = ["public", "storage"]
+
+[db]
+# Port to run the local database on
+port = 54322
+
+[studio]
+# Port to run Supabase Studio on
+port = 54323
+
+[auth]
+# Enable email confirmations
+enable_email_autoconfirm = true
+# JWT expiry time
+jwt_expiry = 3600
+
+[storage]
+# Enable storage
+enabled = true

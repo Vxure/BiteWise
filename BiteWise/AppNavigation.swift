@@ -5,6 +5,7 @@ enum AppScreen: Hashable {
     case welcome
     case pantrySetup
     case macroGoalsOnboarding
+    case signup
     case onboardingCompletion
     case photoUpload
     case detectedIngredients
@@ -37,35 +38,214 @@ class AppNavigationState: ObservableObject {
     }
 }
 
+/// Main navigation container for BiteWise app.
+///
+/// ## Authentication Flow
+///
+/// The app supports two modes of operation:
+/// 1. **Authenticated Mode**: Full access to all features with cloud sync
+/// 2. **Guest Mode**: Limited to local storage only (no Supabase sync)
+///
+/// ### Guest Mode Limitations
+///
+/// When users choose "Continue as Guest", they can use the app but:
+/// - All data is stored locally on the device only
+/// - Supabase RLS policies require `auth.uid()` which is NULL for guests
+/// - Data will not sync across devices or be backed up
+/// - Certain features will prompt users to create an account
+///
+/// See `GuestModeService` for detailed documentation on guest mode handling.
+///
 struct AppNavigation: View {
     @StateObject private var navigationState = AppNavigationState()
+    @ObservedObject private var authService = AuthService.shared
+    @ObservedObject private var guestModeService = GuestModeService.shared
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @State private var initialTabAfterOnboarding: Int = 0
+    @State private var isCheckingAuth: Bool = true
+    
+    /// User can access main app if authenticated OR in guest mode
+    /// Uses GuestModeService.isGuestMode as single source of truth
+    private var canAccessMainApp: Bool {
+        authService.isAuthenticated || guestModeService.isGuestMode
+    }
     
     var body: some View {
-        if !hasCompletedOnboarding {
-            OnboardingFlow(
-                onComplete: {
-                    initialTabAfterOnboarding = 0 // Dashboard tab
-                    hasCompletedOnboarding = true
-                },
-                onCompleteWithScan: {
-                    initialTabAfterOnboarding = 1 // Scan tab
-                    hasCompletedOnboarding = true
+        Group {
+            if isCheckingAuth {
+                // Loading state while checking authentication
+                AuthLoadingView()
+            } else if !hasCompletedOnboarding {
+                // New user or user who hasn't finished onboarding - show full onboarding flow
+                OnboardingFlow(
+                    onComplete: {
+                        initialTabAfterOnboarding = 0 // Dashboard tab
+                        hasCompletedOnboarding = true
+                    },
+                    onCompleteWithScan: {
+                        initialTabAfterOnboarding = 1 // Scan tab
+                        hasCompletedOnboarding = true
+                    },
+                    onSkipAuth: {
+                        // User chose to continue as guest
+                        // Note: Guest data is local-only, see GuestModeService for details
+                        // GuestModeService is the single source of truth for guest mode state
+                        guestModeService.enableGuestMode()
+                        initialTabAfterOnboarding = 0
+                        hasCompletedOnboarding = true
+                    }
+                )
+                .transition(.opacity)
+            } else if !canAccessMainApp {
+                // Returning user who completed onboarding but logged out and not in guest mode
+                AuthView(onSkip: {
+                    // GuestModeService is the single source of truth for guest mode state
+                    guestModeService.enableGuestMode()
+                })
+                .transition(.opacity)
+            } else {
+                // Authenticated or guest mode - show main app
+                MainTabView(initialTab: initialTabAfterOnboarding)
+                    .environmentObject(navigationState)
+                    .transition(.opacity)
+                    .guestModePrompt() // Show account prompt when guest tries cloud features
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: authService.isAuthenticated)
+        .animation(.easeInOut(duration: 0.3), value: hasCompletedOnboarding)
+        .animation(.easeInOut(duration: 0.3), value: isCheckingAuth)
+        .animation(.easeInOut(duration: 0.3), value: guestModeService.isGuestMode)
+        .task {
+            // Check for existing session on app launch
+            await checkAuthentication()
+        }
+    }
+    
+    private func checkAuthentication() async {
+        // Small delay for splash effect
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        
+        // DEBUG: Uncomment the lines below to reset onboarding for testing
+        // hasCompletedOnboarding = false
+        // guestModeService.resetGuestMode()
+        
+        // AuthService automatically updates isAuthenticated via auth state listener
+        // We just need to wait for it to initialize
+        isCheckingAuth = false
+    }
+}
+
+// MARK: - Auth Loading View
+
+struct AuthLoadingView: View {
+    @Environment(\.colorScheme) var colorScheme
+    @State private var logoScale: CGFloat = 0.8
+    @State private var logoOpacity: Double = 0
+    @State private var pulseScale: CGFloat = 1.0
+    
+    var body: some View {
+        ZStack {
+            // Background
+            Group {
+                if colorScheme == .dark {
+                    Color(.systemBackground)
+                } else {
+                    LinearGradient(
+                        colors: [
+                            Color.bwSurface,
+                            Color.bwBackgroundPeach,
+                            Color.bwSurface.opacity(0.9)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 }
-            )
-        } else {
-            MainTabView(initialTab: initialTabAfterOnboarding)
-                .environmentObject(navigationState)
+            }
+            .ignoresSafeArea()
+            
+            VStack(spacing: 24) {
+                // Animated logo
+                ZStack {
+                    // Glow
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color.bwPrimary.opacity(0.15),
+                                    Color.bwPrimary.opacity(0.05),
+                                    Color.clear
+                                ],
+                                center: .center,
+                                startRadius: 40,
+                                endRadius: 120
+                            )
+                        )
+                        .frame(width: 240, height: 240)
+                        .scaleEffect(pulseScale)
+                    
+                    // Logo circle
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white, Color.white.opacity(0.95)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 120, height: 120)
+                        .shadow(color: Color.bwPrimary.opacity(0.2), radius: 25, x: 0, y: 12)
+                    
+                    // Leaf icon
+                    Image(systemName: "leaf.fill")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 55)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.bwPrimary, Color.bwSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .scaleEffect(logoScale)
+                .opacity(logoOpacity)
+                
+                // App name
+                Text("BiteWise")
+                    .font(BWTypography.displayMedium)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.bwPrimary, Color.bwSecondary],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .opacity(logoOpacity)
+            }
+        }
+        .onAppear {
+            // Logo entrance animation
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                logoScale = 1.0
+                logoOpacity = 1.0
+            }
+            
+            // Pulse animation
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                pulseScale = 1.1
+            }
         }
     }
 }
 
-// Onboarding flow with welcome, pantry setup, macro goals, and completion
+// Onboarding flow: Welcome → Pantry → Macro Goals → Signup → Completion
 struct OnboardingFlow: View {
     @StateObject private var navigationState = AppNavigationState()
+    @ObservedObject private var authService = AuthService.shared
     var onComplete: () -> Void
     var onCompleteWithScan: (() -> Void)?
+    var onSkipAuth: (() -> Void)?
     
     var body: some View {
         NavigationStack(path: $navigationState.path) {
@@ -88,12 +268,24 @@ struct OnboardingFlow: View {
                 case .macroGoalsOnboarding:
                     MacroGoalsOnboardingScreen(
                         onContinue: {
-                            // Navigate to completion screen
+                            // Navigate to signup screen
+                            navigationState.navigateTo(.signup)
+                        },
+                        onSkip: {
+                            // Navigate to signup screen
+                            navigationState.navigateTo(.signup)
+                        }
+                    )
+                
+                case .signup:
+                    OnboardingAuthView(
+                        onComplete: {
+                            // After successful signup, go to completion
                             navigationState.navigateTo(.onboardingCompletion)
                         },
                         onSkip: {
-                            // Navigate to completion screen
-                            navigationState.navigateTo(.onboardingCompletion)
+                            // User chose to continue as guest
+                            onSkipAuth?()
                         }
                     )
                 
@@ -115,6 +307,12 @@ struct OnboardingFlow: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .environmentObject(navigationState)
+        }
+        // Listen for auth state changes to auto-advance after signup
+        .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
+            if isAuthenticated && navigationState.path.count > 0 {
+                // User just signed up - the OnboardingAuthView will handle navigation
+            }
         }
     }
 }
@@ -463,6 +661,10 @@ struct MainTabView: View {
             ChatSettingsScreen {
                 navigationState.navigateBack()
             }
+        
+        case .signup:
+            // This screen is only used during onboarding flow, not in main app navigation
+            EmptyView()
         
         case .onboardingCompletion:
             // This screen is only used during onboarding flow, not in main app navigation
