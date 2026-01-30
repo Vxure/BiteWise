@@ -1518,6 +1518,55 @@ class DataManager: ObservableObject {
     func clearSyncError() {
         syncError = nil
     }
+    
+    /// Clear all locally stored user data (used on sign-out/account deletion)
+    func clearLocalUserData() {
+        let defaults = UserDefaults.standard
+        let keysToClear = [
+            userProfileKey,
+            pantryItemsKey,
+            recipeHistoryKey,
+            dailyMacrosKey,
+            cookedRecipesKey,
+            recipeRatingsKey,
+            fridgeItemsKey,
+            lastFridgeScanDateKey,
+            activityLogKey,
+            lastPantryUpdateDateKey,
+            favoriteRecipesKey,
+            generalChatHistoryKey,
+            recipeChatHistoriesKey,
+            macroHistoryKey,
+            recipeFeedbackKey,
+            chatSessionsKey
+        ]
+        
+        for key in keysToClear {
+            defaults.removeObject(forKey: key)
+        }
+        
+        userProfile = UserProfile.dummy
+        pantryItems = Ingredient.pantryItems
+        recipeHistory = []
+        dailyMacros = DailyMacroLog()
+        cookedRecipeIDs = []
+        recipeRatings = [:]
+        fridgeItems = []
+        lastFridgeScanDate = nil
+        activityLog = []
+        lastPantryUpdateDate = nil
+        favoriteRecipes = []
+        generalChatHistory = []
+        recipeChatHistories = [:]
+        macroHistory = []
+        recipeFeedback = []
+        chatSessions = []
+        
+        isSyncing = false
+        syncError = nil
+        lastSyncDate = nil
+        isLoadingFromCloud = false
+    }
 }
 
 // MARK: - Recipe Feedback Model

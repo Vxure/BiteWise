@@ -18,10 +18,6 @@ CREATE POLICY "Users can update own profile"
     ON public.profiles FOR UPDATE
     USING (auth.uid() = id);
 
--- Allow viewing other profiles for future social features (name/avatar only via API)
-CREATE POLICY "Users can view all profiles"
-    ON public.profiles FOR SELECT
-    USING (true);
 
 -- ============================================================================
 -- 2. USER_PREFERENCES POLICIES
@@ -196,9 +192,6 @@ CREATE POLICY "Users can manage own activity feed"
 -- ============================================================================
 -- COMMENTS
 -- ============================================================================
-
-COMMENT ON POLICY "Users can view all profiles" ON public.profiles IS 
-    'Allows viewing basic profile info for social features - restrict fields via API';
 
 COMMENT ON POLICY "Anyone can read ingredients" ON public.ingredients IS 
     'Ingredients is a shared catalog - all authenticated users can read';

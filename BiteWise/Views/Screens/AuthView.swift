@@ -70,6 +70,9 @@ struct AuthFormView: View {
     @State private var contentOpacity: Double = 0
     @State private var contentOffset: CGFloat = 30
     
+    // Forgot password state
+    @State private var showForgotPassword = false
+    
     private enum AuthField {
         case name, email, password, confirmPassword
     }
@@ -293,6 +296,19 @@ struct AuthFormView: View {
             // Primary action button
             primaryActionButton
                 .padding(.top, 8)
+            
+            // Forgot password link (login mode only)
+            if viewModel.isLoginMode {
+                Button {
+                    showForgotPassword = true
+                } label: {
+                    Text("Forgot Password?")
+                        .font(BWTypography.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(Color.bwPrimary)
+                }
+                .padding(.top, 8)
+            }
         }
         .padding(24)
         .background(
@@ -307,6 +323,14 @@ struct AuthFormView: View {
         )
         .opacity(contentOpacity)
         .offset(y: contentOffset)
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordSheet(
+                initialEmail: viewModel.email,
+                onDismiss: { showForgotPassword = false }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
     }
     
     // MARK: - Auth Mode Picker
@@ -992,6 +1016,23 @@ struct OnboardingAuthView: View {
         .navigationBarBackButtonHidden(false)
         .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
             if isAuthenticated {
+                // Update local profile with auth user data (for login flow)
+                if let user = authService.currentUser {
+                    var profile = DataManager.shared.userProfile
+                    // Only update email if not already set (signup already sets both)
+                    if let email = user.email, profile.email.isEmpty {
+                        profile.email = email
+                    }
+                    // Try to get name from user metadata if local profile name is empty
+                    if profile.name.isEmpty, let metadata = user.userMetadata["name"] {
+                        if case .string(let name) = metadata {
+                            profile.name = name
+                        }
+                    }
+                    DataManager.shared.userProfile = profile
+                    DataManager.shared.saveUserProfile()
+                }
+                
                 // Successfully signed in - proceed to completion
                 BWHaptics.success()
                 onComplete()
@@ -1014,6 +1055,9 @@ struct OnboardingAuthFormView: View {
     @State private var logoOpacity: Double = 0
     @State private var contentOpacity: Double = 0
     @State private var contentOffset: CGFloat = 30
+    
+    // Forgot password state
+    @State private var showForgotPassword = false
     
     private enum OnboardingAuthField {
         case name, email, password, confirmPassword
@@ -1275,6 +1319,19 @@ struct OnboardingAuthFormView: View {
             // Primary action button
             primaryActionButton
                 .padding(.top, 6)
+            
+            // Forgot password link (login mode only)
+            if viewModel.isLoginMode {
+                Button {
+                    showForgotPassword = true
+                } label: {
+                    Text("Forgot Password?")
+                        .font(BWTypography.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(Color.bwPrimary)
+                }
+                .padding(.top, 6)
+            }
         }
         .padding(22)
         .background(
@@ -1289,6 +1346,14 @@ struct OnboardingAuthFormView: View {
         )
         .opacity(contentOpacity)
         .offset(y: contentOffset)
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordSheet(
+                initialEmail: viewModel.email,
+                onDismiss: { showForgotPassword = false }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
     }
     
     // MARK: - Error Action Helpers
@@ -1434,6 +1499,255 @@ struct OnboardingAuthFormView: View {
     }
 }
 
+// MARK: - Forgot Password Sheet
+
+struct ForgotPasswordSheet: View {
+    let initialEmail: String
+    let onDismiss: () -> Void
+    
+    @State private var email: String = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var successMessage: String?
+    @Environment(\.colorScheme) var colorScheme
+    @FocusState private var isEmailFocused: Bool
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Background
+                Group {
+                    if colorScheme == .dark {
+                        Color(.systemBackground)
+                    } else {
+                        Color.bwSurface
+                    }
+                }
+                .ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    // Icon
+                    ZStack {
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [
+                                        Color.bwPrimary.opacity(0.1),
+                                        Color.bwPrimary.opacity(0.03),
+                                        Color.clear
+                                    ],
+                                    center: .center,
+                                    startRadius: 30,
+                                    endRadius: 70
+                                )
+                            )
+                            .frame(width: 140, height: 140)
+                        
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 80, height: 80)
+                            .shadow(color: Color.bwPrimary.opacity(0.12), radius: 15, x: 0, y: 8)
+                        
+                        Image(systemName: "key.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 32)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.bwPrimary, Color.bwSecondary],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                    
+                    // Title and description
+                    VStack(spacing: 8) {
+                        Text("Reset Password")
+                            .font(BWTypography.sectionHeader)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.bwPrimary, Color.bwSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                        
+                        Text("Enter your email address and we'll send you a link to reset your password.")
+                            .font(BWTypography.bodySecondary)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                    }
+                    
+                    // Email input
+                    VStack(spacing: 16) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "envelope.fill")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(isEmailFocused ? Color.bwPrimary : .secondary)
+                                .frame(width: 24)
+                            
+                            TextField("Email address", text: $email)
+                                .font(BWTypography.bodyPrimary)
+                                .keyboardType(.emailAddress)
+                                .textContentType(.emailAddress)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .focused($isEmailFocused)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color(.tertiarySystemBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(
+                                    isEmailFocused ? Color.bwPrimary.opacity(0.5) : Color.clear,
+                                    lineWidth: 1.5
+                                )
+                        )
+                        .padding(.horizontal, 24)
+                        
+                        // Error message
+                        if let error = errorMessage {
+                            HStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.system(size: 14))
+                                Text(error)
+                                    .font(BWTypography.caption)
+                            }
+                            .foregroundColor(Color.bwError)
+                            .padding(.horizontal, 24)
+                            .transition(.opacity)
+                        }
+                        
+                        // Success message
+                        if let success = successMessage {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 14))
+                                Text(success)
+                                    .font(BWTypography.caption)
+                            }
+                            .foregroundColor(Color.bwSuccess)
+                            .padding(.horizontal, 24)
+                            .transition(.opacity)
+                        }
+                    }
+                    
+                    // Send button
+                    Button {
+                        sendResetLink()
+                    } label: {
+                        HStack(spacing: 12) {
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.9)
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                    .font(.system(size: 16, weight: .semibold))
+                                
+                                Text("Send Reset Link")
+                                    .font(BWTypography.buttonLabel)
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(
+                                    canSend
+                                        ? BWGradients.accentGradient(for: colorScheme)
+                                        : LinearGradient(colors: [Color.gray.opacity(0.5)], startPoint: .leading, endPoint: .trailing)
+                                )
+                        )
+                        .shadow(
+                            color: colorScheme == .dark ? .clear : (canSend ? Color.bwPrimary.opacity(0.25) : .clear),
+                            radius: 10,
+                            x: 0,
+                            y: 5
+                        )
+                    }
+                    .disabled(!canSend || isLoading)
+                    .buttonStyle(BWPressableButtonStyle(scale: 0.97, enableHaptics: canSend && !isLoading))
+                    .padding(.horizontal, 24)
+                    
+                    Spacer()
+                }
+                .padding(.top, 20)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        onDismiss()
+                    }
+                    .foregroundColor(Color.bwPrimary)
+                }
+            }
+        }
+        .onAppear {
+            email = initialEmail
+        }
+        .animation(.bwSnappy, value: errorMessage)
+        .animation(.bwSnappy, value: successMessage)
+    }
+    
+    private var canSend: Bool {
+        let emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+        return email.wholeMatch(of: emailRegex) != nil
+    }
+    
+    private func sendResetLink() {
+        guard canSend else { return }
+        
+        isLoading = true
+        errorMessage = nil
+        successMessage = nil
+        isEmailFocused = false
+        
+        Task {
+            do {
+                try await AuthService.shared.sendPasswordResetEmail(to: email)
+                
+                await MainActor.run {
+                    BWHaptics.success()
+                    successMessage = "If an account exists for this email, you'll receive a reset link shortly."
+                    isLoading = false
+                    
+                    // Auto-dismiss after success
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                        onDismiss()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    BWHaptics.error()
+                    if let authError = error as? AuthError {
+                        switch authError {
+                        case .rateLimited, .networkError, .invalidEmail:
+                            errorMessage = authError.errorDescription
+                        default:
+                            successMessage = "If an account exists for this email, you'll receive a reset link shortly."
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                                onDismiss()
+                            }
+                        }
+                    } else {
+                        errorMessage = "Unable to send reset link. Please try again."
+                    }
+                    isLoading = false
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Preview
 
 #Preview("Login") {
@@ -1467,4 +1781,11 @@ struct OnboardingAuthFormView: View {
             print("Completed!")
         }
     }
+}
+
+#Preview("Forgot Password") {
+    ForgotPasswordSheet(
+        initialEmail: "test@example.com",
+        onDismiss: {}
+    )
 }

@@ -649,6 +649,18 @@ final class SupabaseDataService {
             .execute()
     }
     
+    // MARK: - Account Deletion
+    
+    /// Delete all user data from the database
+    /// This is called to trigger the full account deletion flow
+    func deleteAllUserData() async throws {
+        // Ensure the user is authenticated
+        _ = try await getCurrentUserId()
+        
+        // Call the server-side deletion function (Edge Function)
+        _ = try await supabase.functions.invoke("delete-user-account")
+    }
+    
     // MARK: - Bulk Sync Operations
     
     /// Sync all local data to the cloud

@@ -18,14 +18,14 @@ struct UserProfile: Identifiable, Codable {
     }
 }
 
-// Dummy user profile data
+// Default user profile data (empty name/email - populated during signup)
 extension UserProfile {
     static var dummy: UserProfile {
         UserProfile(
-            name: "Regan",
-            email: "regan@example.com",
-            dietaryPreferences: ["High Protein", "Low Carb"],
-            allergies: ["Peanuts", "Shellfish"],
+            name: "",
+            email: "",
+            dietaryPreferences: [],
+            allergies: [],
             macroGoals: MacroGoals(
                 dailyCalories: 2000,
                 proteinPercentage: 30,

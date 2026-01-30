@@ -91,9 +91,18 @@ struct SettingsView: View {
                             .textCase(.uppercase)
                             .padding(.leading, 4)
                         
-                        SettingsRow(icon: "person.fill", title: "User Profile", color: Color.bwAccentBlue) {
-                            navigationState.navigateTo(.userProfile)
+                        VStack(spacing: 0) {
+                            SettingsRow(icon: "person.fill", title: "Account Settings", color: Color.bwAccentBlue, showDivider: true) {
+                                navigationState.navigateTo(.userProfile)
+                            }
+                            
+                            SettingsRow(icon: "leaf.fill", title: "Nutrition Preferences", color: Color.bwPrimary) {
+                                navigationState.navigateTo(.nutritionPreferences)
+                            }
                         }
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
                     }
                     
                     VStack(alignment: .leading, spacing: 12) {

@@ -91,14 +91,28 @@ final class AuthService: ObservableObject {
     /// Minimum seconds between resend verification email requests
     private let resendCooldownSeconds: TimeInterval = 60
     
+    /// Minimum seconds between password reset email requests
+    private let resetCooldownSeconds: TimeInterval = 60
+    
     /// Tracks last resend time per email to prevent spam
     private var lastResendTime: [String: Date] = [:]
+    
+    /// Tracks last password reset time per email to prevent abuse
+    private var lastPasswordResetTime: [String: Date] = [:]
     
     /// Returns seconds remaining before resend is allowed, or 0 if allowed
     func secondsUntilResendAllowed(for email: String) -> Int {
         guard let lastTime = lastResendTime[email.lowercased()] else { return 0 }
         let elapsed = Date().timeIntervalSince(lastTime)
         let remaining = resendCooldownSeconds - elapsed
+        return max(0, Int(remaining))
+    }
+    
+    /// Returns seconds remaining before password reset is allowed, or 0 if allowed
+    func secondsUntilPasswordResetAllowed(for email: String) -> Int {
+        guard let lastTime = lastPasswordResetTime[email.lowercased()] else { return 0 }
+        let elapsed = Date().timeIntervalSince(lastTime)
+        let remaining = resetCooldownSeconds - elapsed
         return max(0, Int(remaining))
     }
     
@@ -265,6 +279,78 @@ final class AuthService: ObservableObject {
     func signOut() async throws {
         do {
             try await supabase.auth.signOut()
+            DataManager.shared.clearLocalUserData()
+        } catch {
+            throw mapGenericError(error)
+        }
+    }
+    
+    // MARK: - Password Management
+    
+    /// Change password for the current user (requires current password verification)
+    /// - Parameters:
+    ///   - currentPassword: User's current password for verification
+    ///   - newPassword: The new password to set
+    func changePassword(currentPassword: String, newPassword: String) async throws {
+        guard let user = currentUser, let email = user.email else {
+            throw AuthError.sessionExpired
+        }
+        
+        // First verify current password by attempting to sign in
+        do {
+            _ = try await supabase.auth.signIn(email: email, password: currentPassword)
+        } catch {
+            throw AuthError.invalidCredentials
+        }
+        
+        // Now update to the new password
+        do {
+            try await supabase.auth.update(user: UserAttributes(password: newPassword))
+        } catch {
+            throw mapGenericError(error)
+        }
+    }
+    
+    /// Send a password reset email to the specified address
+    /// - Parameter email: The email address to send the reset link to
+    func sendPasswordResetEmail(to email: String) async throws {
+        let normalizedEmail = email.lowercased()
+        
+        // Check rate limit
+        let cooldownRemaining = secondsUntilPasswordResetAllowed(for: normalizedEmail)
+        if cooldownRemaining > 0 {
+            throw AuthError.rateLimited(retryAfter: cooldownRemaining)
+        }
+        
+        do {
+            try await supabase.auth.resetPasswordForEmail(normalizedEmail, redirectTo: redirectURL)
+            lastPasswordResetTime[normalizedEmail] = Date()
+        } catch {
+            throw mapGenericError(error)
+        }
+    }
+    
+    // MARK: - Account Deletion
+    
+    /// Delete the current user's account and all associated data
+    /// This triggers the server-side deletion flow (DB + storage + auth user)
+    func deleteAccount() async throws {
+        guard currentUser != nil else {
+            throw AuthError.sessionExpired
+        }
+        
+        do {
+            // Perform server-side deletion (DB + storage + auth user)
+            try await SupabaseDataService.shared.deleteAllUserData()
+            
+            // Clear local state immediately after server confirmation
+            DataManager.shared.clearLocalUserData()
+            
+            // Attempt sign out to clear any remaining session tokens
+            try? await supabase.auth.signOut()
+            currentUser = nil
+            isAuthenticated = false
+            isEmailVerified = false
         } catch {
             throw mapGenericError(error)
         }
@@ -297,6 +383,7 @@ final class AuthService: ObservableObject {
         } catch {
             // Session refresh failed - sign out to prevent inconsistent state
             try? await supabase.auth.signOut()
+            DataManager.shared.clearLocalUserData()
             throw AuthError.sessionExpired
         }
     }

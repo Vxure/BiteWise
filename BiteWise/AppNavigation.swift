@@ -14,6 +14,7 @@ enum AppScreen: Hashable {
     case recipeAIAssistant
     case feedback
     case userProfile
+    case nutritionPreferences
     case dailyMacroGoals
     case favorites
     case fridgeItems
@@ -642,6 +643,11 @@ struct MainTabView: View {
         
         case .userProfile:
             UserProfileScreen {
+                navigationState.navigateBack()
+            }
+        
+        case .nutritionPreferences:
+            NutritionPreferencesScreen {
                 navigationState.navigateBack()
             }
         

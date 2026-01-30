@@ -345,6 +345,14 @@ final class AuthViewModel: ObservableObject {
                 name: trimmedName
             )
             
+            // Update local profile with signup name immediately
+            // This ensures the greeting shows the correct name right away
+            var profile = DataManager.shared.userProfile
+            profile.name = trimmedName
+            profile.email = trimmedEmail
+            DataManager.shared.userProfile = profile
+            DataManager.shared.saveUserProfile()
+            
             // Success - transition to awaiting verification
             BWHaptics.success()
             transitionToAwaitingVerification(email: trimmedEmail)

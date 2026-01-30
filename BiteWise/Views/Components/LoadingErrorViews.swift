@@ -184,9 +184,15 @@ struct BWErrorView: View {
 
 // MARK: - Sync Status Indicator
 
-/// Small indicator showing sync status
+/// Small indicator showing sync status - auto-hides after successful sync
 struct BWSyncStatusIndicator: View {
     @ObservedObject private var dataManager = DataManager.shared
+    
+    /// Tracks whether to show the "Synced" success state
+    @State private var showSyncedState = false
+    
+    /// Duration to show "Synced" before auto-hiding (seconds)
+    private let syncedDisplayDuration: Double = 2.5
     
     var body: some View {
         Group {
@@ -206,7 +212,8 @@ struct BWSyncStatusIndicator: View {
                     Capsule()
                         .fill(Color.bwPrimary.opacity(0.1))
                 )
-            } else if let error = dataManager.syncError {
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            } else if let _ = dataManager.syncError {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 10))
@@ -226,7 +233,8 @@ struct BWSyncStatusIndicator: View {
                     BWHaptics.lightImpact()
                     dataManager.clearSyncError()
                 }
-            } else if let lastSync = dataManager.lastSyncDate {
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            } else if showSyncedState {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.icloud.fill")
                         .font(.system(size: 10))
@@ -242,6 +250,23 @@ struct BWSyncStatusIndicator: View {
                     Capsule()
                         .fill(Color.bwPrimary.opacity(0.1))
                 )
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.isSyncing)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showSyncedState)
+        .onChange(of: dataManager.isSyncing) { wasSyncing, isSyncing in
+            // When sync completes (transitions from true to false) and no error, show success briefly
+            if wasSyncing && !isSyncing && dataManager.syncError == nil {
+                withAnimation {
+                    showSyncedState = true
+                }
+                // Auto-hide after delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + syncedDisplayDuration) {
+                    withAnimation {
+                        showSyncedState = false
+                    }
+                }
             }
         }
     }

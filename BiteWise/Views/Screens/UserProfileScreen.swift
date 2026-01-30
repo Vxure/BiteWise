@@ -2,18 +2,39 @@ import SwiftUI
 
 struct UserProfileScreen: View {
     @State private var profile = UserProfile.dummy
-    @State private var newPreference = ""
-    @State private var newAllergy = ""
-    @State private var showMacroEditor = false
     @State private var isEditingName = false
     @State private var isSaving = false
+    
+    // Password change state
+    @State private var currentPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var isChangingPassword = false
+    @State private var passwordError: String?
+    @State private var passwordSuccess = false
+    
+    // Delete account state
+    @State private var deleteConfirmText = ""
+    @State private var showDeleteConfirmation = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
+    
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var authService = AuthService.shared
     @Environment(\.colorScheme) var colorScheme
-    @FocusState private var isPreferenceFocused: Bool
-    @FocusState private var isAllergyFocused: Bool
     @FocusState private var isNameFocused: Bool
+    @FocusState private var focusedPasswordField: PasswordField?
+    
     var onDone: () -> Void
+    
+    private enum PasswordField {
+        case current, new, confirm
+    }
+    
+    // Computed property for user email
+    private var userEmail: String {
+        authService.currentUser?.email ?? profile.email
+    }
     
     var body: some View {
         ZStack {
@@ -33,17 +54,15 @@ struct UserProfileScreen: View {
                     profileHeaderSection
                         .staggeredAppear(index: 0)
                     
-                    // MARK: - Dietary Preferences
-                    dietaryPreferencesSection
+                    // MARK: - Account Info
+                    accountInfoSection
                         .staggeredAppear(index: 1)
                     
-                    // MARK: - Allergies
-                    allergiesSection
-                        .staggeredAppear(index: 2)
-                    
-                    // MARK: - Macro Goals
-                    macroGoalsSection
-                        .staggeredAppear(index: 3)
+                    // MARK: - Change Password (only for authenticated users)
+                    if authService.isAuthenticated {
+                        changePasswordSection
+                            .staggeredAppear(index: 2)
+                    }
                     
                     // MARK: - Save Button
                     GradientButton(
@@ -54,7 +73,14 @@ struct UserProfileScreen: View {
                     .disabled(isSaving)
                     .opacity(isSaving ? 0.7 : 1.0)
                     .padding(.top, 8)
-                    .staggeredAppear(index: 4)
+                    .staggeredAppear(index: 3)
+                    
+                    // MARK: - Delete Account (only for authenticated users)
+                    if authService.isAuthenticated {
+                        deleteAccountSection
+                            .staggeredAppear(index: 4)
+                            .padding(.top, 20)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -68,27 +94,11 @@ struct UserProfileScreen: View {
         }
         .onTapGesture {
             // Dismiss keyboard when tapping outside
-            isPreferenceFocused = false
-            isAllergyFocused = false
             isNameFocused = false
+            focusedPasswordField = nil
             if isEditingName {
                 isEditingName = false
             }
-        }
-        .sheet(isPresented: $showMacroEditor) {
-            MacroGoalsEditorSheet(
-                macroGoals: $profile.macroGoals,
-                hasMacroGoals: $profile.hasMacroGoals,
-                isSheet: true,
-                onSave: {
-                    showMacroEditor = false
-                },
-                onCancel: {
-                    showMacroEditor = false
-                }
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.hidden)
         }
         .overlay(alignment: .top) {
             VStack(spacing: 8) {
@@ -115,6 +125,20 @@ struct UserProfileScreen: View {
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.syncError)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: dataManager.isSyncing)
+        .confirmationDialog(
+            "Delete Account",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete My Account", role: .destructive) {
+                performAccountDeletion()
+            }
+            Button("Cancel", role: .cancel) {
+                deleteConfirmText = ""
+            }
+        } message: {
+            Text("This action cannot be undone. All your data will be permanently deleted.")
+        }
     }
     
     // MARK: - Profile Header Section
@@ -193,466 +217,322 @@ struct UserProfileScreen: View {
                 .buttonStyle(.bwPressable)
             }
             .animation(.bwSnappy, value: isEditingName)
-            
-            // Profile completeness badge
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(Color.bwPrimary)
-                
-                Text("Profile Complete")
-                    .font(BWTypography.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.bwPrimary.opacity(0.1))
-            )
         }
         .frame(maxWidth: .infinity)
         .bwCardStyle(padding: 24, cornerRadius: 24)
     }
     
-    // MARK: - Dietary Preferences Section
-    private var dietaryPreferencesSection: some View {
+    // MARK: - Account Info Section
+    private var accountInfoSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Section header
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(Color.bwPrimary.opacity(0.12))
+                        .fill(Color.bwAccentBlue.opacity(0.12))
                         .frame(width: 36, height: 36)
                     
-                    Image(systemName: "leaf.fill")
+                    Image(systemName: "person.circle.fill")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color.bwPrimary)
+                        .foregroundColor(Color.bwAccentBlue)
                 }
                 
-                Text("Dietary Preferences")
+                Text("Account Information")
                     .font(BWTypography.cardTitle)
             }
             
-            // Input field
-            HStack(spacing: 12) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 18))
-                    .foregroundColor(isPreferenceFocused ? Color.bwPrimary : .secondary)
+            // Email (read-only)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Email")
+                    .font(BWTypography.caption)
+                    .foregroundColor(.secondary)
                 
-                TextField("Add a preference...", text: $newPreference)
-                    .font(BWTypography.bodyPrimary)
-                    .focused($isPreferenceFocused)
-                    .submitLabel(.done)
-                    .onSubmit {
-                        addPreference()
-                    }
-                
-                if !newPreference.isEmpty {
-                    Button(action: addPreference) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundColor(Color.bwPrimary)
-                    }
-                    .buttonStyle(.bwPressable)
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.tertiarySystemBackground))
-            )
-            .adaptiveShadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(isPreferenceFocused ? Color.bwAdaptivePrimary(for: colorScheme).opacity(0.5) : Color.clear, lineWidth: 2)
-            )
-            .animation(.bwSnappy, value: isPreferenceFocused)
-            .animation(.bwSnappy, value: newPreference.isEmpty)
-            
-            // Tags
-            if !profile.dietaryPreferences.isEmpty {
-                FlowLayout(horizontalSpacing: 8, verticalSpacing: 10) {
-                    ForEach(profile.dietaryPreferences, id: \.self) { preference in
-                        preferenceTag(preference)
-                    }
-                }
-            } else {
-                emptyStateView(
-                    icon: "leaf",
-                    message: "No preferences added yet"
-                )
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .bwCardStyle(padding: 20, cornerRadius: 24)
-    }
-    
-    private func preferenceTag(_ preference: String) -> some View {
-        HStack(spacing: 6) {
-            Text(preference)
-                .font(BWTypography.bodySecondary)
-                .foregroundColor(Color.bwPrimary)
-            
-            Button(action: {
-                BWHaptics.lightImpact()
-                withAnimation(.bwSpring) {
-                    removePreference(preference)
-                }
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(Color.bwPrimary.opacity(0.6))
-            }
-            .buttonStyle(.bwPressable)
-        }
-        .padding(.vertical, 10)
-        .padding(.leading, 14)
-        .padding(.trailing, 10)
-        .background(
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.bwPrimary.opacity(0.12), Color.bwPrimary.opacity(0.08)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.bwPrimary.opacity(0.15), lineWidth: 1)
-        )
-    }
-    
-    // MARK: - Allergies Section
-    private var allergiesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Section header
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(Color.bwAccent.opacity(0.12))
-                        .frame(width: 36, height: 36)
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "envelope.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
                     
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color.bwAccent)
-                }
-                
-                Text("Allergies & Intolerances")
-                    .font(BWTypography.cardTitle)
-            }
-            
-            // Input field
-            HStack(spacing: 12) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 18))
-                    .foregroundColor(isAllergyFocused ? Color.bwAccent : .secondary)
-                
-                TextField("Add an allergy...", text: $newAllergy)
-                    .font(BWTypography.bodyPrimary)
-                    .focused($isAllergyFocused)
-                    .submitLabel(.done)
-                    .onSubmit {
-                        addAllergy()
-                    }
-                
-                if !newAllergy.isEmpty {
-                    Button(action: addAllergy) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundColor(Color.bwAccent)
-                    }
-                    .buttonStyle(.bwPressable)
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.tertiarySystemBackground))
-            )
-            .adaptiveShadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(isAllergyFocused ? Color.bwAdaptiveAccent(for: colorScheme).opacity(0.5) : Color.clear, lineWidth: 2)
-            )
-            .animation(.bwSnappy, value: isAllergyFocused)
-            .animation(.bwSnappy, value: newAllergy.isEmpty)
-            
-            // Tags
-            if !profile.allergies.isEmpty {
-                FlowLayout(horizontalSpacing: 8, verticalSpacing: 10) {
-                    ForEach(profile.allergies, id: \.self) { allergy in
-                        allergyTag(allergy)
-                    }
-                }
-            } else {
-                emptyStateView(
-                    icon: "checkmark.shield",
-                    message: "No allergies added"
-                )
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .bwCardStyle(padding: 20, cornerRadius: 24)
-    }
-    
-    private func allergyTag(_ allergy: String) -> some View {
-        HStack(spacing: 6) {
-            Text(allergy)
-                .font(BWTypography.bodySecondary)
-                .foregroundColor(Color.bwAccent)
-            
-            Button(action: {
-                BWHaptics.lightImpact()
-                withAnimation(.bwSpring) {
-                    removeAllergy(allergy)
-                }
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(Color.bwAccent.opacity(0.6))
-            }
-            .buttonStyle(.bwPressable)
-        }
-        .padding(.vertical, 10)
-        .padding(.leading, 14)
-        .padding(.trailing, 10)
-        .background(
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.bwAccent.opacity(0.12), Color.bwAccent.opacity(0.08)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.bwAccent.opacity(0.15), lineWidth: 1)
-        )
-    }
-    
-    // MARK: - Macro Goals Section
-    private var macroGoalsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Section header with Edit button
-            HStack {
-                HStack(spacing: 10) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.bwProtein.opacity(0.15))
-                            .frame(width: 36, height: 36)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(userEmail.isEmpty ? "Not signed in" : userEmail)
+                            .font(BWTypography.bodySecondary)
+                            .foregroundColor(userEmail.isEmpty ? .secondary : .primary)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                         
-                        Image(systemName: "chart.pie.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(Color.bwProtein)
-                    }
-                    
-                    Text("Macro Goals")
-                        .font(BWTypography.cardTitle)
-                }
-                
-                Spacer()
-                
-                // Edit button
-                Button(action: {
-                    BWHaptics.lightImpact()
-                    showMacroEditor = true
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Edit")
-                            .font(BWTypography.buttonSmall)
-                    }
-                    .foregroundColor(Color.bwPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(Color.bwPrimary.opacity(0.1))
-                    )
-                }
-                .buttonStyle(.bwPressable)
-            }
-            
-            // Status badge for macro goals
-            if profile.hasMacroGoals {
-                // Daily calories badge
-                HStack(spacing: 4) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 12))
-                    Text("\(profile.macroGoals.dailyCalories) cal/day")
-                        .font(BWTypography.caption)
-                        .fontWeight(.medium)
-                }
-                .foregroundColor(Color.bwCalories)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(Color.bwCalories.opacity(0.12))
-                )
-            } else {
-                // Not set badge
-                HStack(spacing: 6) {
-                    Image(systemName: "info.circle.fill")
-                        .font(.system(size: 12))
-                    Text("Not configured - tap Edit to set goals")
-                        .font(BWTypography.caption)
-                }
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.gray.opacity(0.08))
-                )
-            }
-            
-            // Macro cards grid (tappable to open editor)
-            Button(action: {
-                BWHaptics.lightImpact()
-                showMacroEditor = true
-            }) {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    macroCard(
-                        title: "Protein",
-                        emoji: "💪",
-                        percentage: profile.macroGoals.proteinPercentage,
-                        color: Color.bwProtein
-                    )
-                    
-                    macroCard(
-                        title: "Carbs",
-                        emoji: "⚡️",
-                        percentage: profile.macroGoals.carbsPercentage,
-                        color: Color.bwCarbs
-                    )
-                    
-                    macroCard(
-                        title: "Fats",
-                        emoji: "🥑",
-                        percentage: profile.macroGoals.fatsPercentage,
-                        color: Color.bwFats
-                    )
-                    
-                    // Summary card
-                    VStack(spacing: 8) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.25))
-                                .frame(width: 44, height: 44)
-                            
-                            Image(systemName: "equal.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
+                        if authService.isEmailVerified {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 12))
+                                Text("Verified")
+                                    .font(BWTypography.captionSmall)
+                            }
+                            .foregroundColor(Color.bwSuccess)
                         }
-                        
-                        Text("Total")
-                            .font(BWTypography.captionSmall)
-                            .foregroundColor(.white.opacity(0.9))
-                        
-                        Text("100%")
-                            .font(BWTypography.numericSmall)
-                            .foregroundColor(.white)
                     }
-                    .padding(.vertical, 16)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.bwPrimary, Color.bwSecondary],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    )
-                    .shadow(color: Color.bwPrimary.opacity(0.3), radius: 6, x: 0, y: 3)
+                    
+                    Spacer(minLength: 0)
                 }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color(.tertiarySystemBackground))
+                )
             }
-            .buttonStyle(.bwPressable)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .bwCardStyle(padding: 20, cornerRadius: 24)
     }
     
-    private func macroCard(title: String, emoji: String, percentage: Double, color: Color) -> some View {
-        // Calculate grams based on calories and percentage
-        let calories = Double(profile.macroGoals.dailyCalories)
-        let divisor: Double = (title == "Fats") ? 9 : 4 // Fats = 9 cal/g, Protein & Carbs = 4 cal/g
-        let grams = Int((calories * percentage / 100) / divisor)
-        
-        return VStack(spacing: 10) {
-            // Circular progress
-            ZStack {
-                CircularProgressRing(
-                    progress: percentage / 100,
-                    lineWidth: 6,
-                    backgroundColor: Color.white.opacity(0.25),
-                    foregroundColor: .white,
-                    animateOnAppear: true
+    // MARK: - Change Password Section
+    private var changePasswordSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section header
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(Color.bwAccentGold.opacity(0.12))
+                        .frame(width: 36, height: 36)
+                    
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color.bwAccentGold)
+                }
+                
+                Text("Change Password")
+                    .font(BWTypography.cardTitle)
+            }
+            
+            // Password fields
+            VStack(spacing: 12) {
+                // Current password
+                secureField(
+                    placeholder: "Current Password",
+                    text: $currentPassword,
+                    field: .current
                 )
-                .frame(width: 44, height: 44)
                 
-                Text(emoji)
-                    .font(.system(size: 16))
+                // New password
+                secureField(
+                    placeholder: "New Password",
+                    text: $newPassword,
+                    field: .new
+                )
+                
+                // Confirm password
+                secureField(
+                    placeholder: "Confirm New Password",
+                    text: $confirmPassword,
+                    field: .confirm
+                )
             }
             
-            Text(title)
-                .font(BWTypography.captionSmall)
-                .foregroundColor(.white.opacity(0.9))
-            
-            // Grams primary, percentage secondary
-            VStack(spacing: 2) {
-                Text("\(grams)g")
-                    .font(BWTypography.numericSmall)
-                    .foregroundColor(.white)
-                
-                Text("\(Int(percentage))%")
-                    .font(BWTypography.captionSmall)
-                    .foregroundColor(.white.opacity(0.7))
+            // Password validation hint
+            if !newPassword.isEmpty && newPassword.count < 6 {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                    Text("Password must be at least 6 characters")
+                        .font(BWTypography.captionSmall)
+                }
+                .foregroundColor(Color.bwAccent)
             }
+            
+            // Password mismatch warning
+            if !confirmPassword.isEmpty && newPassword != confirmPassword {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                    Text("Passwords do not match")
+                        .font(BWTypography.captionSmall)
+                }
+                .foregroundColor(Color.bwError)
+            }
+            
+            // Error message
+            if let error = passwordError {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                    Text(error)
+                        .font(BWTypography.captionSmall)
+                }
+                .foregroundColor(Color.bwError)
+                .transition(.opacity)
+            }
+            
+            // Success message
+            if passwordSuccess {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12))
+                    Text("Password changed successfully!")
+                        .font(BWTypography.captionSmall)
+                }
+                .foregroundColor(Color.bwSuccess)
+                .transition(.opacity)
+            }
+            
+            // Change password button
+            Button(action: changePassword) {
+                HStack(spacing: 8) {
+                    if isChangingPassword {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.bwPrimary))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "key.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    Text(isChangingPassword ? "Changing..." : "Change Password")
+                        .font(BWTypography.buttonSmall)
+                }
+                .foregroundColor(canChangePassword ? Color.bwPrimary : .secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(canChangePassword ? Color.bwPrimary.opacity(0.1) : Color.gray.opacity(0.1))
+                )
+            }
+            .disabled(!canChangePassword || isChangingPassword)
+            .buttonStyle(.bwPressable)
         }
-        .padding(.vertical, 16)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    LinearGradient(
-                        colors: [color, color.opacity(0.8)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .shadow(color: color.opacity(0.3), radius: 6, x: 0, y: 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bwCardStyle(padding: 20, cornerRadius: 24)
+        .animation(.bwSnappy, value: passwordError)
+        .animation(.bwSnappy, value: passwordSuccess)
     }
     
-    // MARK: - Empty State View
-    private func emptyStateView(icon: String, message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundColor(.secondary)
+    private func secureField(placeholder: String, text: Binding<String>, field: PasswordField) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 16))
+                .foregroundColor(focusedPasswordField == field ? Color.bwAccentGold : .secondary)
             
-            Text(message)
-                .font(BWTypography.caption)
-                .foregroundColor(.secondary)
+            SecureField(placeholder, text: text)
+                .font(BWTypography.bodyPrimary)
+                .focused($focusedPasswordField, equals: field)
+                .textContentType(field == .current ? .password : .newPassword)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(colorScheme == .dark ? Color.white.opacity(0.03) : Color.black.opacity(0.02))
-                .strokeBorder(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05), style: StrokeStyle(lineWidth: 1, dash: [6]))
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.tertiarySystemBackground))
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(focusedPasswordField == field ? Color.bwAccentGold.opacity(0.5) : Color.clear, lineWidth: 2)
+        )
+        .animation(.bwSnappy, value: focusedPasswordField)
+    }
+    
+    private var canChangePassword: Bool {
+        !currentPassword.isEmpty &&
+        newPassword.count >= 6 &&
+        newPassword == confirmPassword
+    }
+    
+    // MARK: - Delete Account Section
+    private var deleteAccountSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section header
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(Color.bwError.opacity(0.12))
+                        .frame(width: 36, height: 36)
+                    
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color.bwError)
+                }
+                
+                Text("Delete Account")
+                    .font(BWTypography.cardTitle)
+            }
+            
+            // Warning text
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color.bwAccent)
+                
+                Text("This action is permanent and cannot be undone. All your data including recipes, preferences, and history will be permanently deleted.")
+                    .font(BWTypography.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.bwAccent.opacity(0.08))
+            )
+            
+            // Confirmation input
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Type DELETE to confirm")
+                    .font(BWTypography.caption)
+                    .foregroundColor(.secondary)
+                
+                TextField("", text: $deleteConfirmText)
+                    .font(BWTypography.bodyPrimary)
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color(.tertiarySystemBackground))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(deleteConfirmText == "DELETE" ? Color.bwError.opacity(0.5) : Color.clear, lineWidth: 2)
+                    )
+            }
+            
+            // Error message
+            if let error = deleteError {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                    Text(error)
+                        .font(BWTypography.captionSmall)
+                }
+                .foregroundColor(Color.bwError)
+                .transition(.opacity)
+            }
+            
+            // Delete button
+            Button(action: {
+                showDeleteConfirmation = true
+            }) {
+                HStack(spacing: 8) {
+                    if isDeleting {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    Text(isDeleting ? "Deleting..." : "Delete My Account")
+                        .font(BWTypography.buttonSmall)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(canDelete ? Color.bwError : Color.gray.opacity(0.5))
+                )
+            }
+            .disabled(!canDelete || isDeleting)
+            .buttonStyle(.bwPressable)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bwCardStyle(padding: 20, cornerRadius: 24)
+        .animation(.bwSnappy, value: deleteError)
+    }
+    
+    private var canDelete: Bool {
+        deleteConfirmText == "DELETE"
     }
     
     // MARK: - Actions
@@ -672,30 +552,67 @@ struct UserProfileScreen: View {
         }
     }
     
-    private func addPreference() {
-        guard !newPreference.isEmpty else { return }
-        BWHaptics.lightImpact()
-        withAnimation(.bwSpring) {
-            profile.dietaryPreferences.append(newPreference.trimmingCharacters(in: .whitespacesAndNewlines))
-            newPreference = ""
+    private func changePassword() {
+        guard canChangePassword else { return }
+        
+        isChangingPassword = true
+        passwordError = nil
+        passwordSuccess = false
+        focusedPasswordField = nil
+        
+        Task {
+            do {
+                try await authService.changePassword(
+                    currentPassword: currentPassword,
+                    newPassword: newPassword
+                )
+                
+                await MainActor.run {
+                    BWHaptics.success()
+                    passwordSuccess = true
+                    currentPassword = ""
+                    newPassword = ""
+                    confirmPassword = ""
+                    isChangingPassword = false
+                    
+                    // Clear success message after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        passwordSuccess = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    BWHaptics.error()
+                    passwordError = error.localizedDescription
+                    isChangingPassword = false
+                }
+            }
         }
     }
     
-    private func removePreference(_ preference: String) {
-        profile.dietaryPreferences.removeAll { $0 == preference }
-    }
-    
-    private func addAllergy() {
-        guard !newAllergy.isEmpty else { return }
-        BWHaptics.lightImpact()
-        withAnimation(.bwSpring) {
-            profile.allergies.append(newAllergy.trimmingCharacters(in: .whitespacesAndNewlines))
-            newAllergy = ""
+    private func performAccountDeletion() {
+        guard canDelete else { return }
+        
+        isDeleting = true
+        deleteError = nil
+        
+        Task {
+            do {
+                try await authService.deleteAccount()
+                
+                await MainActor.run {
+                    BWHaptics.success()
+                    // The auth state change will automatically navigate away
+                    isDeleting = false
+                }
+            } catch {
+                await MainActor.run {
+                    BWHaptics.error()
+                    deleteError = error.localizedDescription
+                    isDeleting = false
+                }
+            }
         }
-    }
-    
-    private func removeAllergy(_ allergy: String) {
-        profile.allergies.removeAll { $0 == allergy }
     }
 }
 
