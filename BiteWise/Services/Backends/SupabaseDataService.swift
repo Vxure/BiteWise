@@ -8,6 +8,7 @@
 
 import Foundation
 import Supabase
+import Functions
 
 // MARK: - Data Service Errors
 
@@ -651,14 +652,72 @@ final class SupabaseDataService {
     
     // MARK: - Account Deletion
     
+    /// Response structure for deletion job
+    struct DeletionJobResponse: Decodable {
+        let success: Bool
+        let jobId: String?
+        let status: String?
+        let message: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case success
+            case jobId = "job_id"
+            case status
+            case message
+        }
+    }
+    
     /// Delete all user data from the database
-    /// This is called to trigger the full account deletion flow
-    func deleteAllUserData() async throws {
+    /// This triggers the job-based deletion flow for robustness
+    /// - Returns: The deletion job status
+    @discardableResult
+    func deleteAllUserData() async throws -> DeletionJobResponse {
         // Ensure the user is authenticated
         _ = try await getCurrentUserId()
         
         // Call the server-side deletion function (Edge Function)
-        _ = try await supabase.functions.invoke("delete-user-account")
+        // This creates a job and processes it immediately
+        // Use decode option to get the response as our expected type
+        do {
+            let jobResponse: DeletionJobResponse = try await supabase.functions.invoke(
+                "delete-user-account",
+                options: FunctionInvokeOptions(
+                    body: [:] as [String: String] // Empty body
+                )
+            )
+            
+            // Check for errors in the response
+            if !jobResponse.success {
+                throw DataServiceError.serverError(jobResponse.message ?? "Deletion failed")
+            }
+            
+            return jobResponse
+        } catch let error as DataServiceError {
+            throw error
+        } catch {
+            throw DataServiceError.serverError("Failed to delete account: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Check the status of a deletion job
+    /// - Returns: The current job status
+    func getDeletionJobStatus() async throws -> DeletionJobResponse {
+        _ = try await getCurrentUserId()
+        
+        // Call the RPC and decode the JSON response
+        let jsonData: Data = try await supabase.rpc("get_deletion_job_status").execute().data
+        
+        // Parse the JSON manually since the RPC returns a JSON object
+        guard let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            throw DataServiceError.decodingError(NSError(domain: "SupabaseDataService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON response"]))
+        }
+        
+        return DeletionJobResponse(
+            success: json["success"] as? Bool ?? false,
+            jobId: json["job_id"] as? String,
+            status: json["status"] as? String,
+            message: json["message"] as? String
+        )
     }
     
     // MARK: - Bulk Sync Operations

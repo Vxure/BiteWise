@@ -8,6 +8,7 @@
 import Foundation
 import Supabase
 import Auth
+import Functions
 import os.log
 
 // MARK: - Auth Error Types
@@ -312,28 +313,67 @@ final class AuthService: ObservableObject {
     }
     
     /// Send a password reset email to the specified address
+    /// Uses server-side Edge Function for additional rate limiting and security
     /// - Parameter email: The email address to send the reset link to
     func sendPasswordResetEmail(to email: String) async throws {
         let normalizedEmail = email.lowercased()
         
-        // Check rate limit
+        // Check client-side rate limit first (quick rejection)
         let cooldownRemaining = secondsUntilPasswordResetAllowed(for: normalizedEmail)
         if cooldownRemaining > 0 {
             throw AuthError.rateLimited(retryAfter: cooldownRemaining)
         }
         
         do {
-            try await supabase.auth.resetPasswordForEmail(normalizedEmail, redirectTo: redirectURL)
+            // Use Edge Function for server-side rate limiting
+            struct ResetRequest: Encodable {
+                let email: String
+                let redirect_to: String
+            }
+            
+            struct ResetResponse: Decodable {
+                let success: Bool?
+                let message: String?
+                let error: String?
+                let retry_after: Int?
+            }
+            
+            let request = ResetRequest(
+                email: normalizedEmail,
+                redirect_to: redirectURL.absoluteString
+            )
+            
+            let response: ResetResponse = try await supabase.functions.invoke(
+                "send-password-reset",
+                options: FunctionInvokeOptions(body: request)
+            )
+            
+            // Check for rate limit response
+            if let retryAfter = response.retry_after {
+                throw AuthError.rateLimited(retryAfter: retryAfter)
+            }
+            
+            // Record successful send time for client-side cooldown
             lastPasswordResetTime[normalizedEmail] = Date()
+        } catch let error as AuthError {
+            throw error
         } catch {
-            throw mapGenericError(error)
+            // Fall back to direct Supabase call if Edge Function fails
+            logger.warning("Edge Function failed, falling back to direct call: \(error.localizedDescription, privacy: .public)")
+            do {
+                try await supabase.auth.resetPasswordForEmail(normalizedEmail, redirectTo: redirectURL)
+                lastPasswordResetTime[normalizedEmail] = Date()
+            } catch {
+                throw mapGenericError(error)
+            }
         }
     }
     
     // MARK: - Account Deletion
     
     /// Delete the current user's account and all associated data
-    /// This triggers the server-side deletion flow (DB + storage + auth user)
+    /// This triggers the server-side job-based deletion flow for robustness
+    /// The job queue ensures deletion completes even if there are partial failures
     func deleteAccount() async throws {
         guard currentUser != nil else {
             throw AuthError.sessionExpired
@@ -341,9 +381,15 @@ final class AuthService: ObservableObject {
         
         do {
             // Perform server-side deletion (DB + storage + auth user)
-            try await SupabaseDataService.shared.deleteAllUserData()
+            // This uses a job queue for robustness and idempotency
+            let response = try await SupabaseDataService.shared.deleteAllUserData()
             
-            // Clear local state immediately after server confirmation
+            // Log the deletion status
+            logger.info("Account deletion initiated: status=\(response.status ?? "unknown", privacy: .public)")
+            
+            // Clear local state immediately
+            // Even if the job is "queued" (202), we clear local state
+            // The server will complete deletion in the background
             DataManager.shared.clearLocalUserData()
             
             // Attempt sign out to clear any remaining session tokens
