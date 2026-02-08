@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Celebration screen shown when onboarding completes
-/// Guides the user to their first scan action
+/// Celebration screen shown after user completes preferences setup
+/// Encourages user to create an account to save their preferences
 struct OnboardingCompletionScreen: View {
     var onComplete: () -> Void
     var onScanNow: () -> Void
@@ -87,7 +87,7 @@ struct OnboardingCompletionScreen: View {
                             )
                         )
                     
-                    Text("Your preferences are saved. Now let's discover some delicious recipes!")
+                    Text("Your preferences are ready. Create an account to save them and try personalized recipes!")
                         .font(BWTypography.bodySecondary)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -100,25 +100,12 @@ struct OnboardingCompletionScreen: View {
                 
                 // Action buttons
                 VStack(spacing: 16) {
-                    // Primary action - Scan fridge
+                    // Primary action - Continue to save preferences
                     GradientButton(
-                        icon: "camera.fill",
-                        text: "Scan My Fridge",
-                        action: onScanNow
+                        icon: "arrow.right",
+                        text: "Continue",
+                        action: onComplete
                     )
-                    
-                    // Secondary action - Go to dashboard
-                    Button(action: onComplete) {
-                        HStack(spacing: 6) {
-                            Text("Explore Dashboard First")
-                                .font(.bwSubheadline())
-                            
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .foregroundColor(.secondary)
-                        .padding(.vertical, 14)
-                    }
                 }
                 .padding(.horizontal, 32)
                 .padding(.bottom, 50)

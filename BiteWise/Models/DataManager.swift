@@ -55,8 +55,9 @@ class DataManager: ObservableObject {
     
     private init() {
         // Load saved data or use defaults
+        // Note: pantryItems defaults to empty array - users set up pantry during onboarding
         self.userProfile = DataManager.loadUserProfile() ?? UserProfile.dummy
-        self.pantryItems = DataManager.loadPantryItems() ?? Ingredient.pantryItems
+        self.pantryItems = DataManager.loadPantryItems() ?? []
         self.recipeHistory = DataManager.loadRecipeHistory() ?? []
         self.dailyMacros = DataManager.loadDailyMacros() ?? DailyMacroLog()
         self.cookedRecipeIDs = DataManager.loadCookedRecipes()
@@ -89,6 +90,15 @@ class DataManager: ObservableObject {
         }
         // Sync to cloud in background
         syncUserProfileToCloud()
+    }
+    
+    /// Reset user identity fields (name/email) without clearing onboarding data.
+    /// Used when entering guest mode to prevent showing previous user's info
+    /// while preserving pantry items, macro goals, dietary preferences, etc.
+    func resetUserIdentity() {
+        userProfile.name = ""
+        userProfile.email = ""
+        saveUserProfile()
     }
     
     private static func loadUserProfile() -> UserProfile? {
@@ -1352,27 +1362,44 @@ class DataManager: ObservableObject {
     /// 3. Mark migration as complete for this user
     ///
     /// After calling this, call loadFromCloud() to merge any existing cloud data.
+    ///
+    /// - Returns: `true` if migration succeeded or was skipped (no data to migrate),
+    ///            `false` if migration failed and should be retried
     @MainActor
-    func migrateGuestDataOnFirstAuth() async {
-        guard checkShouldSyncToCloud() else { return }
+    @discardableResult
+    func migrateGuestDataOnFirstAuth() async -> Bool {
+        // Safety check: only sync if authenticated and not in guest mode
+        // If this fails, something is wrong - don't clear the flag so we can retry
+        guard checkShouldSyncToCloud() else {
+            logger.warning("Migration called but sync conditions not met (isGuestMode=\(GuestModeService.shared.isGuestMode), isAuthenticated=\(AuthService.shared.isAuthenticated))")
+            return false
+        }
+        
+        // Prevent concurrent migrations (race condition between OnboardingAuthView and DashboardView)
+        // Return false so the caller does NOT clear wasInGuestMode flag
+        // The other caller (the one actually syncing) will clear the flag if it succeeds
+        guard !isSyncing else {
+            logger.info("Migration already in progress, skipping duplicate call")
+            return false
+        }
         
         // Get current user ID
         guard let userId = AuthService.shared.currentUser?.id.uuidString else {
             logger.warning("Cannot migrate: No authenticated user")
-            return
+            return false
         }
         
         // Skip if already migrated for this user
         guard !hasAlreadyMigratedGuestData(for: userId) else {
             logger.info("Guest data already migrated for user")
-            return
+            return true
         }
         
         // Skip if no meaningful local data
         guard hasLocalDataToMigrate else {
             logger.info("No local data to migrate")
             markGuestDataAsMigrated(for: userId)
-            return
+            return true
         }
         
         isSyncing = true
@@ -1394,13 +1421,15 @@ class DataManager: ObservableObject {
             markGuestDataAsMigrated(for: userId)
             
             logger.info("Successfully migrated guest data")
+            isSyncing = false
+            return true
             
         } catch {
             logger.error("Failed to migrate guest data: \(error.localizedDescription, privacy: .public)")
             syncError = "Failed to migrate your data: \(error.localizedDescription)"
+            isSyncing = false
+            return false
         }
-        
-        isSyncing = false
     }
     
     // MARK: - Load from Cloud
@@ -1545,8 +1574,10 @@ class DataManager: ObservableObject {
             defaults.removeObject(forKey: key)
         }
         
+        // Reset all in-memory data to defaults
+        // Note: pantryItems is empty - users set up pantry during onboarding
         userProfile = UserProfile.dummy
-        pantryItems = Ingredient.pantryItems
+        pantryItems = []
         recipeHistory = []
         dailyMacros = DailyMacroLog()
         cookedRecipeIDs = []

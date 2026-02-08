@@ -37,6 +37,11 @@ struct PantrySetupScreen: View {
         isOnboarding ? "Get Started" : "Save"
     }
     
+    /// Custom items are items in selectedItems that aren't in commonItems
+    private var customItems: [String] {
+        selectedItems.filter { !commonItems.contains($0) }
+    }
+    
     // MARK: - Header Animation Calculations
     
     /// Progress of scroll (0 = top, 1 = fully scrolled past header height)
@@ -153,8 +158,18 @@ struct PantrySetupScreen: View {
                     
                     // Common Items Section
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Common Items")
-                            .font(.bwHeadline())
+                        HStack {
+                            Text("Common Items")
+                                .font(.bwHeadline())
+                            
+                            Spacer()
+                            
+                            if !selectedItems.isEmpty {
+                                Text("\(selectedItems.count) selected")
+                                    .font(.bwCaption())
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         
                         FlowLayout(horizontalSpacing: 10, verticalSpacing: 10) {
                             ForEach(commonItems, id: \.self) { item in
@@ -184,53 +199,43 @@ struct PantrySetupScreen: View {
                                 }
                             }
                         }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .bwCardStyle()
-                    
-                    // Your Pantry Section
-                    if !selectedItems.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Your Pantry")
-                                    .font(.bwHeadline())
-                                
-                                Spacer()
-                                
-                                Text("\(selectedItems.count) items")
-                                    .font(.bwCaption())
-                                    .foregroundColor(.secondary)
-                            }
+                        
+                        // Custom Items (items added via text field that aren't in commonItems)
+                        if !customItems.isEmpty {
+                            Divider()
+                                .padding(.vertical, 4)
+                            
+                            Text("Custom Items")
+                                .font(.bwCaption())
+                                .foregroundColor(.secondary)
                             
                             FlowLayout(horizontalSpacing: 10, verticalSpacing: 10) {
-                                ForEach(selectedItems, id: \.self) { item in
-                                    HStack(spacing: 6) {
+                                ForEach(customItems, id: \.self) { item in
+                                    Button(action: {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            toggleSelection(item)
+                                        }
+                                    }) {
                                         Text(item)
                                             .font(.bwSubheadline())
-                                        
-                                        Button(action: {
-                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                                removeItem(item)
-                                            }
-                                        }) {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(0.6))
-                                        }
+                                            .padding(.vertical, 10)
+                                            .padding(.horizontal, 18)
+                                            .background(
+                                                Capsule()
+                                                    .fill(Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(colorScheme == .dark ? 0.25 : 0.2))
+                                            )
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(Color.bwAdaptiveAccentGreen(for: colorScheme), lineWidth: 1.5)
+                                            )
+                                            .foregroundColor(Color.bwAdaptiveAccentGreen(for: colorScheme))
                                     }
-                                    .padding(.vertical, 10)
-                                    .padding(.horizontal, 16)
-                                    .background(
-                                        Capsule()
-                                            .fill(Color.bwAdaptiveAccentGreen(for: colorScheme).opacity(colorScheme == .dark ? 0.2 : 0.15))
-                                    )
-                                    .foregroundColor(Color.bwAdaptiveAccentGreen(for: colorScheme))
                                 }
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .bwCardStyle()
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .bwCardStyle()
                     
                     // Continue/Save button
                     VStack(spacing: 8) {
@@ -372,10 +377,6 @@ struct PantrySetupScreen: View {
         } else {
             selectedItems.append(item)
         }
-    }
-    
-    private func removeItem(_ item: String) {
-        selectedItems.removeAll { $0 == item }
     }
 }
 

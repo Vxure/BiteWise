@@ -344,9 +344,9 @@ private struct LandingContentView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: 20) {
                 Spacer()
-                    .frame(height: 20)
+                    .frame(height: 15)
                 
                 // Mascot circle with animated appearance
                 MascotView()

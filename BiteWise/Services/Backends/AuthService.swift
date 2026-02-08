@@ -23,8 +23,12 @@ enum AuthError: LocalizedError, Equatable {
     case sessionExpired
     case rateLimited(retryAfter: Int)
     case verificationLinkExpired
+    case linkExpired
+    case linkInvalid
+    case linkAlreadyUsed
     case unknown(String)
     
+    /// User-facing error description (sanitized for security)
     var errorDescription: String? {
         switch self {
         case .invalidCredentials:
@@ -34,7 +38,7 @@ enum AuthError: LocalizedError, Equatable {
         case .userAlreadyExists:
             return "An account with this email already exists."
         case .weakPassword:
-            return "Password must be at least 6 characters."
+            return "Password must be at least 8 characters with uppercase, lowercase, and numbers."
         case .invalidEmail:
             return "Please enter a valid email address."
         case .networkError:
@@ -45,9 +49,25 @@ enum AuthError: LocalizedError, Equatable {
             return "Too many requests. Please wait \(seconds) seconds."
         case .verificationLinkExpired:
             return "Verification link has expired. Please request a new one."
-        case .unknown(let message):
+        case .linkExpired:
+            return "This link has expired. Please request a new one."
+        case .linkInvalid:
+            return "This link is invalid or malformed."
+        case .linkAlreadyUsed:
+            return "This link has already been used."
+        case .unknown:
+            // Security: Do not expose internal error details to users
+            return "An unexpected error occurred. Please try again."
+        }
+    }
+    
+    /// Internal error message for logging (not shown to users)
+    /// Use this with privacy: .private in os.log
+    var internalMessage: String? {
+        if case .unknown(let message) = self {
             return message
         }
+        return nil
     }
     
     /// Whether this error is recoverable by retrying
@@ -61,11 +81,73 @@ enum AuthError: LocalizedError, Equatable {
     }
 }
 
+// MARK: - Deep Link Types
+
+/// The type of auth action from a Supabase email link
+enum DeepLinkType: String {
+    case signup
+    case recovery
+    case magiclink
+    case emailChange = "email_change"
+    case invite
+    
+    /// Initialize from URL query parameter
+    init?(from url: URL) {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let typeParam = components.queryItems?.first(where: { $0.name == "type" })?.value else {
+            return nil
+        }
+        self.init(rawValue: typeParam)
+    }
+}
+
+/// The result of handling a deep link URL
+enum DeepLinkResult: Equatable {
+    case signupConfirmed
+    case recoveryReady(email: String)
+    case magicLinkAuthenticated
+    case emailChangeConfirmed(newEmail: String)
+    case inviteAccepted
+    case error(AuthError)
+    case notHandled
+    
+    static func == (lhs: DeepLinkResult, rhs: DeepLinkResult) -> Bool {
+        switch (lhs, rhs) {
+        case (.signupConfirmed, .signupConfirmed):
+            return true
+        case (.recoveryReady(let lEmail), .recoveryReady(let rEmail)):
+            return lEmail == rEmail
+        case (.magicLinkAuthenticated, .magicLinkAuthenticated):
+            return true
+        case (.emailChangeConfirmed(let lEmail), .emailChangeConfirmed(let rEmail)):
+            return lEmail == rEmail
+        case (.inviteAccepted, .inviteAccepted):
+            return true
+        case (.error(let lError), .error(let rError)):
+            return lError == rError
+        case (.notHandled, .notHandled):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 // MARK: - Auth Event Notifications
 
 extension Notification.Name {
     /// Posted when email verification is completed via deep link
     static let emailVerificationCompleted = Notification.Name("emailVerificationCompleted")
+    /// Posted when password recovery link is received and session is ready
+    static let passwordRecoveryReady = Notification.Name("passwordRecoveryReady")
+    /// Posted when magic link authentication is completed
+    static let magicLinkAuthenticated = Notification.Name("magicLinkAuthenticated")
+    /// Posted when email change is confirmed
+    static let emailChangeConfirmed = Notification.Name("emailChangeConfirmed")
+    /// Posted when invite is accepted
+    static let inviteAccepted = Notification.Name("inviteAccepted")
+    /// Posted when a deep link error occurs
+    static let deepLinkError = Notification.Name("deepLinkError")
 }
 
 // MARK: - Auth Service
@@ -163,32 +245,86 @@ final class AuthService: ObservableObject {
     
     /// Handle incoming URL from email verification deep link
     /// - Parameter url: The URL received via onOpenURL
-    /// - Returns: True if the URL was handled successfully
+    /// - Returns: DeepLinkResult indicating what happened
     @discardableResult
-    func handleOpenURL(_ url: URL) async -> Bool {
+    func handleOpenURL(_ url: URL) async -> DeepLinkResult {
         // Only handle our auth scheme
-        guard url.scheme == "bitewise" else { return false }
+        guard url.scheme == "bitewise" else { return .notHandled }
+        
+        // Parse the deep link type from URL
+        let linkType = DeepLinkType(from: url)
         
         do {
             // Let Supabase handle the URL and extract session
             // This establishes a valid session for the verified user
-            try await supabase.auth.session(from: url)
+            let session = try await supabase.auth.session(from: url)
             
-            // Note: We no longer force a sign out after verification.
-            // The user clicked the link expecting to be logged in, so we keep them authenticated.
-            // The auth state listener will automatically update isAuthenticated.
-            
-            // Post notification that verification is complete
-            NotificationCenter.default.post(
-                name: .emailVerificationCompleted,
-                object: nil
-            )
-            
-            return true
+            // Route based on link type
+            // Note: Results are returned directly to the caller (BiteWiseApp) which passes them
+            // to DeepLinkStateManager - the single source of truth for deep link handling.
+            // This avoids duplicate handling that would occur with notifications.
+            switch linkType {
+            case .signup:
+                // Email verification completed
+                return .signupConfirmed
+                
+            case .recovery:
+                // Password reset - session is valid, user needs to set new password
+                let email = session.user.email ?? ""
+                return .recoveryReady(email: email)
+                
+            case .magiclink:
+                // Magic link authentication - user is now logged in
+                return .magicLinkAuthenticated
+                
+            case .emailChange:
+                // Email change confirmed - user's email has been updated
+                let newEmail = session.user.email ?? ""
+                return .emailChangeConfirmed(newEmail: newEmail)
+                
+            case .invite:
+                // Invite accepted - user is now part of the system
+                return .inviteAccepted
+                
+            case .none:
+                // No type specified - treat as generic email verification (legacy behavior)
+                return .signupConfirmed
+            }
         } catch {
+            let authError = mapDeepLinkError(error)
             logger.error("Failed to handle auth URL: \(error.localizedDescription, privacy: .public)")
-            return false
+            
+            return .error(authError)
         }
+    }
+    
+    /// Map deep link specific errors
+    private func mapDeepLinkError(_ error: Error) -> AuthError {
+        let errorMessage = error.localizedDescription.lowercased()
+        
+        // Check for expired token/link
+        if errorMessage.contains("expired") ||
+           errorMessage.contains("otp has expired") ||
+           errorMessage.contains("token has expired") {
+            return .linkExpired
+        }
+        
+        // Check for already used token
+        if errorMessage.contains("already been used") ||
+           errorMessage.contains("already used") ||
+           errorMessage.contains("otp_disabled") {
+            return .linkAlreadyUsed
+        }
+        
+        // Check for invalid token
+        if errorMessage.contains("invalid") ||
+           errorMessage.contains("malformed") ||
+           errorMessage.contains("not found") {
+            return .linkInvalid
+        }
+        
+        // Fall back to generic error mapping
+        return mapGenericError(error)
     }
     
     // MARK: - Sign In
@@ -225,6 +361,9 @@ final class AuthService: ObservableObject {
     /// - Returns: The newly created user (unverified)
     @discardableResult
     func signUp(email: String, password: String, name: String? = nil) async throws -> User {
+        // Validate password strength before attempting signup
+        try validatePassword(password)
+        
         do {
             // Include name in user metadata for the database trigger
             var userData: [String: AnyJSON] = [:]
@@ -274,6 +413,46 @@ final class AuthService: ObservableObject {
         }
     }
     
+    // MARK: - Magic Link Authentication
+    
+    /// Send a magic link (passwordless) sign-in email
+    /// User will receive an email with a link that signs them in directly
+    /// - Parameter email: The email address to send the magic link to
+    /// - Throws: `AuthError.rateLimited` if called too frequently, or other auth errors
+    func sendMagicLink(to email: String) async throws {
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        
+        // Validate email format
+        guard isValidEmailFormat(normalizedEmail) else {
+            throw AuthError.invalidEmail
+        }
+        
+        // Check rate limit (reuse resend rate limiting)
+        let cooldownRemaining = secondsUntilResendAllowed(for: normalizedEmail)
+        if cooldownRemaining > 0 {
+            throw AuthError.rateLimited(retryAfter: cooldownRemaining)
+        }
+        
+        do {
+            try await supabase.auth.signInWithOTP(
+                email: normalizedEmail,
+                redirectTo: redirectURL
+            )
+            
+            // Record successful send time for rate limiting
+            lastResendTime[normalizedEmail] = Date()
+        } catch {
+            throw mapGenericError(error)
+        }
+    }
+    
+    /// Validates email format using a simple regex check
+    private func isValidEmailFormat(_ email: String) -> Bool {
+        let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        return emailPredicate.evaluate(with: email)
+    }
+    
     // MARK: - Sign Out
     
     /// Sign out the current user
@@ -307,6 +486,57 @@ final class AuthService: ObservableObject {
         // Now update to the new password
         do {
             try await supabase.auth.update(user: UserAttributes(password: newPassword))
+        } catch {
+            throw mapGenericError(error)
+        }
+    }
+    
+    /// Update password during password recovery flow
+    /// This is called after the user clicks the password reset link and has a valid recovery session
+    /// - Parameter newPassword: The new password to set
+    func updatePasswordFromRecovery(newPassword: String) async throws {
+        // Ensure we have a valid session from the recovery link
+        guard currentUser != nil else {
+            throw AuthError.sessionExpired
+        }
+        
+        // Validate password strength (8+ chars, uppercase, lowercase, numbers)
+        try validatePassword(newPassword)
+        
+        do {
+            try await supabase.auth.update(user: UserAttributes(password: newPassword))
+            
+            // Sign out after password reset so user can log in with new password
+            // This is a security best practice
+            try await supabase.auth.signOut()
+        } catch {
+            throw mapGenericError(error)
+        }
+    }
+    
+    // MARK: - Email Change
+    
+    /// Request an email change for the current user
+    /// Sends a confirmation email to the new address
+    /// - Parameter newEmail: The new email address
+    func requestEmailChange(to newEmail: String) async throws {
+        guard currentUser != nil else {
+            throw AuthError.sessionExpired
+        }
+        
+        // Validate email format
+        let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        guard emailPredicate.evaluate(with: newEmail.trimmingCharacters(in: .whitespaces)) else {
+            throw AuthError.invalidEmail
+        }
+        
+        do {
+            // Request email change - Supabase will send confirmation to new email
+            try await supabase.auth.update(
+                user: UserAttributes(email: newEmail.lowercased().trimmingCharacters(in: .whitespaces)),
+                redirectTo: redirectURL
+            )
         } catch {
             throw mapGenericError(error)
         }
@@ -468,6 +698,33 @@ final class AuthService: ObservableObject {
         throw lastError ?? AuthError.networkError
     }
     
+    // MARK: - Password Validation
+    
+    /// Validates password strength according to security requirements
+    /// Requirements:
+    /// - Minimum 8 characters
+    /// - At least one uppercase letter
+    /// - At least one lowercase letter
+    /// - At least one number
+    /// - Parameter password: The password to validate
+    /// - Returns: True if password meets all requirements
+    private func isPasswordStrong(_ password: String) -> Bool {
+        let hasMinLength = password.count >= 8
+        let hasUppercase = password.range(of: "[A-Z]", options: .regularExpression) != nil
+        let hasLowercase = password.range(of: "[a-z]", options: .regularExpression) != nil
+        let hasNumber = password.range(of: "[0-9]", options: .regularExpression) != nil
+        return hasMinLength && hasUppercase && hasLowercase && hasNumber
+    }
+    
+    /// Validates password and throws weakPassword if requirements are not met
+    /// - Parameter password: The password to validate
+    /// - Throws: AuthError.weakPassword if validation fails
+    private func validatePassword(_ password: String) throws {
+        guard isPasswordStrong(password) else {
+            throw AuthError.weakPassword
+        }
+    }
+    
     // MARK: - Error Mapping
     
     private func mapAuthError(_ error: AuthError) -> AuthError {
@@ -518,12 +775,14 @@ final class AuthService: ObservableObject {
             return .sessionExpired
         }
         
-        // Rate limiting detection
+        // Rate limiting detection - extract retry-after time from error message
         if errorMessage.contains("rate limit") ||
            errorMessage.contains("too many requests") ||
-           errorMessage.contains("429") {
-            // Try to extract retry-after, default to 60 seconds
-            return .rateLimited(retryAfter: 60)
+           errorMessage.contains("429") ||
+           errorMessage.contains("request rate limit") {
+            let retryAfter = extractRetryAfterSeconds(from: error)
+            logger.warning("Rate limited: retry after \(retryAfter) seconds")
+            return .rateLimited(retryAfter: retryAfter)
         }
         
         // Expired verification link
@@ -533,7 +792,73 @@ final class AuthService: ObservableObject {
             return .verificationLinkExpired
         }
         
-        // Return the original error message for unknown errors
-        return .unknown(error.localizedDescription)
+        // Link already used
+        if errorMessage.contains("already been used") ||
+           errorMessage.contains("already used") ||
+           errorMessage.contains("otp_disabled") {
+            return .linkAlreadyUsed
+        }
+        
+        // Invalid link
+        if errorMessage.contains("invalid otp") ||
+           errorMessage.contains("invalid token") ||
+           errorMessage.contains("malformed") {
+            return .linkInvalid
+        }
+        
+        // Return unknown error - internal message stored for logging but not shown to user
+        // The errorDescription property returns a sanitized generic message
+        let internalError = AuthError.unknown(error.localizedDescription)
+        // Log the actual error privately for debugging
+        Logger(subsystem: Bundle.main.bundleIdentifier ?? "BiteWise", category: "AuthService")
+            .error("Unknown auth error: \(error.localizedDescription, privacy: .private)")
+        return internalError
+    }
+    
+    // MARK: - Retry-After Extraction
+    
+    /// Extract the retry-after duration from various error formats
+    /// Supabase may include this in different ways depending on the endpoint
+    private func extractRetryAfterSeconds(from error: Error) -> Int {
+        let errorString = String(describing: error)
+        let errorMessage = error.localizedDescription
+        
+        // Try to extract from common patterns:
+        // "Rate limit exceeded. Please try again in 60 seconds"
+        // "Too many requests, retry after 45 seconds"
+        // "request rate limit reached, retry after 30s"
+        // "429: Too Many Requests" (default to 60)
+        
+        let patterns = [
+            // Pattern: "in X seconds" or "in X second"
+            #"in\s+(\d+)\s*seconds?"#,
+            // Pattern: "after X seconds" or "after Xs"
+            #"after\s+(\d+)\s*s(?:econds?)?"#,
+            // Pattern: "retry_after: X" or "retry-after: X"
+            #"retry[_-]?after[:\s]+(\d+)"#,
+            // Pattern: "wait X seconds"
+            #"wait\s+(\d+)\s*seconds?"#,
+            // Pattern: just a number followed by seconds
+            #"(\d+)\s*seconds?"#
+        ]
+        
+        // Check both the error description and full error string
+        for source in [errorMessage, errorString] {
+            let lowercased = source.lowercased()
+            
+            for pattern in patterns {
+                if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+                   let match = regex.firstMatch(in: lowercased, range: NSRange(lowercased.startIndex..., in: lowercased)),
+                   match.numberOfRanges > 1,
+                   let range = Range(match.range(at: 1), in: lowercased),
+                   let seconds = Int(lowercased[range]) {
+                    // Sanity check: limit to reasonable range (1 second to 1 hour)
+                    return min(max(seconds, 1), 3600)
+                }
+            }
+        }
+        
+        // Default to 60 seconds if we can't extract a specific time
+        return 60
     }
 }

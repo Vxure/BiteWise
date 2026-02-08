@@ -17,6 +17,11 @@ struct WelcomeScreen: View {
     @State private var buttonOffset: CGFloat = 60
     @State private var buttonOpacity: Double = 0
     
+    // Mascot bounce animation states
+    @State private var mascotOffsetY: CGFloat = 0
+    @State private var plateOffsetY: CGFloat = 0
+    @State private var plateScaleX: CGFloat = 1.0
+    
     // Background animation
     @State private var gradientOffset: CGFloat = 0
     @State private var pulseScale: CGFloat = 1.0
@@ -128,104 +133,34 @@ struct WelcomeScreen: View {
     
     // MARK: - Logo Section
     private var logoSection: some View {
-        ZStack {
-            // Outermost ring - soft glow
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color.bwPrimary.opacity(0.15),
-                            Color.bwPrimary.opacity(0.05),
-                            Color.clear
-                        ],
-                        center: .center,
-                        startRadius: 60,
-                        endRadius: 140
-                    )
-                )
-                .frame(width: 280, height: 280)
-                .scaleEffect(pulseScale)
-            
-            // Decorative outer ring
-            Circle()
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.bwPrimary.opacity(0.2), Color.bwPrimary.opacity(0.05)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 2
-                )
-                .frame(width: 200, height: 200)
-            
-            // Main logo circle with gradient
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white, Color.white.opacity(0.95)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 160, height: 160)
-                .shadow(color: Color.bwPrimary.opacity(0.2), radius: 30, x: 0, y: 15)
-                .shadow(color: Color.bwPrimary.opacity(0.1), radius: 10, x: 0, y: 5)
-            
-            // Inner accent ring
-            Circle()
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.bwPrimary.opacity(0.1), Color.clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-                .frame(width: 140, height: 140)
-            
-            // Leaf icon with gradient
-            Image(systemName: "leaf.fill")
+        VStack(spacing: 0) {
+            // Mascot - sits on top of the plate
+            Image("Mascot")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 75)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color.bwPrimary, Color.bwSecondary],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: Color.bwPrimary.opacity(0.3), radius: 8, x: 0, y: 4)
+                .frame(width: 140)
+                .zIndex(1)
+                .offset(y: mascotOffsetY + 90) // push mascot down onto plate
             
-            // Decorative sparkles
-            Group {
-                Image(systemName: "sparkle")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color.bwProtein)
-                    .offset(x: 85, y: -60)
-                    .opacity(logoOpacity * 0.8)
-                
-                Image(systemName: "sparkle")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(Color.bwAccent.opacity(0.7))
-                    .offset(x: 95, y: -35)
-                    .opacity(logoOpacity * 0.6)
-                
-                Image(systemName: "sparkle")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundColor(Color.bwPrimary.opacity(0.5))
-                    .offset(x: -80, y: 50)
-                    .opacity(logoOpacity * 0.5)
-            }
+            // Plate - right below mascot
+            Image("Plate")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 190)
+                .offset(y: plateOffsetY - 55) // pull plate up under mascot
+                .scaleEffect(x: plateScaleX, y: 1.0)
         }
         .scaleEffect(logoScale)
         .opacity(logoOpacity)
         .rotationEffect(.degrees(logoRotation))
+        .onTapGesture {
+            triggerBounce()
+        }
     }
     
     // MARK: - Title Section
     private var titleSection: some View {
-        Text("BiteWise")
+        Text("Taberoux")
             .font(BWTypography.heroTitle)
             .foregroundStyle(
                 LinearGradient(
@@ -240,7 +175,7 @@ struct WelcomeScreen: View {
     
     // MARK: - Subtitle Section
     private var subtitleSection: some View {
-        Text("Smart recipes for your ingredients")
+        Text("Personalized recipes, minus the thinking.")
             .font(BWTypography.bodySecondary)
             .foregroundColor(.secondary)
             .multilineTextAlignment(.center)
@@ -293,6 +228,11 @@ struct WelcomeScreen: View {
             logoRotation = 0
         }
         
+        // Mascot bounce after logo settles
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            triggerBounce()
+        }
+        
         // Title reveal
         withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.5)) {
             titleOpacity = 1.0
@@ -315,6 +255,47 @@ struct WelcomeScreen: View {
         withAnimation(.spring(response: 0.8, dampingFraction: 0.75).delay(1.0)) {
             buttonOffset = 0
             buttonOpacity = 1.0
+        }
+    }
+    
+    // MARK: - Mascot Bounce Animation
+    @State private var isBouncing = false
+    
+    private func triggerBounce() {
+        guard !isBouncing else { return }
+        isBouncing = true
+        
+        // Phase 1: Mascot jumps up off the plate
+        withAnimation(.easeOut(duration: 0.3)) {
+            mascotOffsetY = -40
+        }
+        
+        // Phase 2: Mascot falls back down
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.easeIn(duration: 0.2)) {
+                mascotOffsetY = 0
+            }
+        }
+        
+        // Phase 3: Plate recoils down on impact
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeOut(duration: 0.1)) {
+                plateOffsetY = 10
+                plateScaleX = 1.05
+            }
+        }
+        
+        // Phase 4: Everything springs back to rest
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.45)) {
+                plateOffsetY = 0
+                plateScaleX = 1.0
+            }
+        }
+        
+        // Allow re-trigger after animation completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            isBouncing = false
         }
     }
 }

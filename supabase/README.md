@@ -6,8 +6,14 @@ This directory contains the complete Supabase database schema for BiteWise.
 
 ```
 supabase/
-├── README.md           # This file
-└── migrations/         # SQL migration files
+├── README.md               # This file
+├── config.toml             # Local development configuration (rate limits, auth)
+├── config.toml.example     # Template for config.toml
+├── functions/              # Edge Functions
+│   ├── delete-user-account/
+│   ├── process-account-deletion/
+│   └── send-password-reset/
+└── migrations/             # SQL migration files
     ├── 00001_foundation_tables.sql     # profiles, user_preferences, user_settings
     ├── 00002_inventory_tables.sql      # ingredients, fridge_scans, fridge_items, pantry_items
     ├── 00003_recipe_tables.sql         # recipes, saved_recipes, recipe_history, recipe_feedback
@@ -158,7 +164,86 @@ let settings: UserSettings = try await supabase
 - **Ingredients catalog**: Readable by all authenticated users
 - **Storage**: Users can only upload to their own folders
 
+## Rate Limit Configuration
+
+Supabase applies rate limits to authentication endpoints to prevent abuse. The defaults are strict:
+
+| Endpoint | Default Limit | Notes |
+|----------|---------------|-------|
+| Sign-in attempts | 30/hour per IP | Applies to all sign-in methods |
+| Email sending | 2/hour | Verification, password reset, magic links |
+| OTP/Magic link | 30/hour | |
+| Token refresh | 1800/hour per IP | |
+| Verification | 360/hour per IP | |
+
+### Local Development
+
+The `config.toml` file in this directory has relaxed rate limits for development:
+
+```toml
+[auth.rate_limit]
+email_sent = 100           # Emails per hour (default: 2)
+sms_sent = 100             # SMS per hour (default: 30)
+anonymous_users = 300      # Anonymous sign-ins per hour per IP (default: 30)
+token_refresh = 500        # Token refreshes per 5 min per IP (default: 150)
+sign_in_sign_ups = 300     # Sign-in/signup requests per 5 min per IP (default: 30)
+token_verifications = 300  # OTP/magic link verifications per 5 min per IP (default: 30)
+```
+
+**Important:** The `sign_in_sign_ups` limit is the key setting that controls how many login attempts you can make. The default of 30 per 5 minutes is very restrictive for development.
+
+After modifying `config.toml`, restart local Supabase:
+
+```bash
+supabase stop
+supabase start
+```
+
+### Production Configuration
+
+Configure rate limits in the Supabase Dashboard:
+
+1. Go to **Authentication** > **Rate Limits**
+2. Adjust limits based on your expected traffic:
+   - `rate_limit_email_sent`: Emails per hour (requires custom SMTP for values > 2)
+   - `rate_limit_otp`: OTP/magic link requests per hour
+   - `rate_limit_token_refresh`: Token refresh requests per hour
+   - `rate_limit_verify`: Verification requests per hour
+
+**Using Management API:**
+
+```bash
+curl -X PATCH "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rate_limit_email_sent": 10,
+    "rate_limit_otp": 100,
+    "rate_limit_token_refresh": 3600
+  }'
+```
+
+### Custom SMTP for Higher Email Limits
+
+The default 2 emails/hour limit uses Supabase's built-in email service. For higher limits:
+
+1. Go to **Project Settings** > **Auth** > **SMTP Settings**
+2. Configure your SMTP provider (SendGrid, Mailgun, AWS SES, etc.)
+3. Once custom SMTP is enabled, you can increase `rate_limit_email_sent`
+
 ## Troubleshooting
+
+### Rate Limit Errors
+
+**"Too many requests. Please wait X seconds"**
+
+This error occurs when rate limits are exceeded. Solutions:
+
+1. **Local development**: Check that `config.toml` has relaxed limits and restart Supabase
+2. **Production**: Increase limits in Dashboard or via Management API
+3. **Email limits**: Configure custom SMTP to increase email sending limits
+
+**Rate limits are per IP address**, not per email. Using different emails from the same IP will still hit the limit.
 
 ### Migration Order
 

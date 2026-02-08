@@ -44,12 +44,25 @@ final class GuestModeService: ObservableObject {
     /// UserDefaults key for guest mode
     private let guestModeKey = "isGuestMode"
     
+    /// UserDefaults key for tracking pending guest migration
+    private let wasInGuestModeKey = "wasInGuestModePendingMigration"
+    
     /// Whether the user is currently in guest mode
     /// This is the SINGLE SOURCE OF TRUTH for guest mode state.
     /// All views should read from this property via GuestModeService.shared.
     @Published private(set) var isGuestMode: Bool {
         didSet {
             UserDefaults.standard.set(isGuestMode, forKey: guestModeKey)
+        }
+    }
+    
+    /// Tracks if user was in guest mode before signing in.
+    /// Used to trigger data migration after successful auth.
+    /// Persisted to UserDefaults to survive app restarts during sign-in flow.
+    /// Reset when enableGuestMode() is called (user cancelled sign-in).
+    @Published private(set) var wasInGuestMode: Bool {
+        didSet {
+            UserDefaults.standard.set(wasInGuestMode, forKey: wasInGuestModeKey)
         }
     }
     
@@ -61,11 +74,13 @@ final class GuestModeService: ObservableObject {
     
     private init() {
         self.isGuestMode = UserDefaults.standard.bool(forKey: guestModeKey)
+        self.wasInGuestMode = UserDefaults.standard.bool(forKey: wasInGuestModeKey)
     }
     
     /// Reset guest mode (for testing or when user creates account and logs out)
     func resetGuestMode() {
         isGuestMode = false
+        wasInGuestMode = false
         showAccountPrompt = false
     }
     
@@ -74,12 +89,26 @@ final class GuestModeService: ObservableObject {
     /// Enable guest mode
     func enableGuestMode() {
         isGuestMode = true
+        // Reset wasInGuestMode - user is still a guest, didn't complete auth
+        // This handles the case where user clicks "Sign In" but then cancels
+        wasInGuestMode = false
+        // Reset name/email to prevent showing previous user's info
+        // Preserves pantry items, macro goals, dietary preferences from onboarding
+        DataManager.shared.resetUserIdentity()
     }
     
     /// Disable guest mode (usually when user creates account)
     func disableGuestMode() {
+        // Remember that user was a guest before transitioning to auth
+        // This flag is used to trigger data migration after successful auth
+        wasInGuestMode = isGuestMode
         isGuestMode = false
         showAccountPrompt = false
+    }
+    
+    /// Clear the wasInGuestMode flag after migration is complete
+    func clearWasInGuestMode() {
+        wasInGuestMode = false
     }
     
     // MARK: - Feature Guards

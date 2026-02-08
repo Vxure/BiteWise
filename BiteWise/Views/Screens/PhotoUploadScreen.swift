@@ -108,7 +108,8 @@ struct PhotoUploadScreen: View {
                             .font(.bwTitle2())
                             .multilineTextAlignment(.center)
                         
-                        Text("Take a photo of your fridge contents for AI ingredient detection")
+//                        Text("Take a photo of your fridge contents for AI ingredient detection")
+                        Text("Scan your fridge and we’ll suggest recipes you can make right now, tailored to your taste")
                             .font(.bwSubheadline())
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)

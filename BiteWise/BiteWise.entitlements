@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		Associated Domains for Universal Links
+		
+		This enables the app to handle Supabase auth email links via Universal Links
+		in production, providing a better user experience than custom URL schemes.
+		
+		Configuration Requirements:
+		1. Ensure your Supabase project has the correct redirect URLs configured
+		2. Add the apple-app-site-association file to your Supabase project
+		
+		For local development/simulator testing:
+		- The custom URL scheme (bitewise://) in Info.plist is used instead
+		- Universal Links require a real device and valid HTTPS domain
+		
+		See Supabase docs: https://supabase.com/docs/guides/auth/native-mobile-deep-linking
+	-->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:bpacbsvwcautauafjjjh.supabase.co</string>
+	</array>
+</dict>
+</plist>

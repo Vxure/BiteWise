@@ -1,4 +1,5 @@
-import SwiftUI 
+import SwiftUI
+import Combine
 
 // Navigation path used to keep track of screen stack
 enum AppScreen: Hashable {
@@ -39,7 +40,7 @@ class AppNavigationState: ObservableObject {
     }
 }
 
-/// Main navigation container for BiteWise app.
+/// Main navigation container for Taberoux app.
 ///
 /// ## Authentication Flow
 ///
@@ -61,9 +62,16 @@ struct AppNavigation: View {
     @StateObject private var navigationState = AppNavigationState()
     @ObservedObject private var authService = AuthService.shared
     @ObservedObject private var guestModeService = GuestModeService.shared
+    @EnvironmentObject private var deepLinkManager: DeepLinkStateManager
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @State private var initialTabAfterOnboarding: Int = 0
     @State private var isCheckingAuth: Bool = true
+    
+    // MARK: - Password Reset Security Timeout
+    /// Timestamp when password reset screen was shown
+    @State private var passwordResetStartTime: Date?
+    /// Security timeout for password reset (5 minutes)
+    private let passwordResetTimeout: TimeInterval = 300
     
     /// User can access main app if authenticated OR in guest mode
     /// Uses GuestModeService.isGuestMode as single source of truth
@@ -71,54 +79,111 @@ struct AppNavigation: View {
         authService.isAuthenticated || guestModeService.isGuestMode
     }
     
+    /// Check if we have a pending password recovery that needs to show the reset screen
+    private var showPasswordResetOverlay: Bool {
+        if case .recoveryReady = deepLinkManager.pendingResult {
+            return true
+        }
+        return false
+    }
+    
+    /// Get the email for password reset if available
+    private var passwordResetEmail: String {
+        if case .recoveryReady(let email) = deepLinkManager.pendingResult {
+            return email
+        }
+        return ""
+    }
+    
     var body: some View {
-        Group {
-            if isCheckingAuth {
-                // Loading state while checking authentication
-                AuthLoadingView()
-            } else if !hasCompletedOnboarding {
-                // New user or user who hasn't finished onboarding - show full onboarding flow
-                OnboardingFlow(
-                    onComplete: {
-                        initialTabAfterOnboarding = 0 // Dashboard tab
-                        hasCompletedOnboarding = true
-                    },
-                    onCompleteWithScan: {
-                        initialTabAfterOnboarding = 1 // Scan tab
-                        hasCompletedOnboarding = true
-                    },
-                    onSkipAuth: {
-                        // User chose to continue as guest
-                        // Note: Guest data is local-only, see GuestModeService for details
+        ZStack {
+            // Main content based on auth state
+            Group {
+                if isCheckingAuth {
+                    // Loading state while checking authentication
+                    AuthLoadingView()
+                } else if !hasCompletedOnboarding {
+                    // New user or user who hasn't finished onboarding - show full onboarding flow
+                    OnboardingFlow(
+                        onComplete: {
+                            initialTabAfterOnboarding = 0 // Dashboard tab
+                            hasCompletedOnboarding = true
+                        },
+                        onCompleteWithScan: {
+                            initialTabAfterOnboarding = 1 // Scan tab
+                            hasCompletedOnboarding = true
+                        },
+                        onSkipAuth: {
+                            // User chose to continue as guest
+                            // Note: Guest data is local-only, see GuestModeService for details
+                            // GuestModeService is the single source of truth for guest mode state
+                            guestModeService.enableGuestMode()
+                            initialTabAfterOnboarding = 0
+                            hasCompletedOnboarding = true
+                        }
+                    )
+                    .transition(.opacity)
+                } else if !canAccessMainApp {
+                    // Returning user who completed onboarding but logged out and not in guest mode
+                    AuthView(onSkip: {
                         // GuestModeService is the single source of truth for guest mode state
                         guestModeService.enableGuestMode()
-                        initialTabAfterOnboarding = 0
-                        hasCompletedOnboarding = true
+                    })
+                    .transition(.opacity)
+                } else {
+                    // Authenticated or guest mode - show main app
+                    MainTabView(initialTab: initialTabAfterOnboarding)
+                        .environmentObject(navigationState)
+                        .transition(.opacity)
+                        .guestModePrompt() // Show account prompt when guest tries cloud features
+                }
+            }
+            
+            // Password reset overlay - shown on top of any screen when recovery link is clicked
+            if showPasswordResetOverlay {
+                PasswordResetScreen(
+                    email: passwordResetEmail,
+                    onComplete: {
+                        // Password was reset successfully
+                        deepLinkManager.clearPendingResult()
+                        // User will be signed out by AuthService, navigation will update
+                    },
+                    onCancel: {
+                        // User cancelled - clear the pending result
+                        deepLinkManager.clearPendingResult()
                     }
                 )
                 .transition(.opacity)
-            } else if !canAccessMainApp {
-                // Returning user who completed onboarding but logged out and not in guest mode
-                AuthView(onSkip: {
-                    // GuestModeService is the single source of truth for guest mode state
-                    guestModeService.enableGuestMode()
-                })
-                .transition(.opacity)
-            } else {
-                // Authenticated or guest mode - show main app
-                MainTabView(initialTab: initialTabAfterOnboarding)
-                    .environmentObject(navigationState)
-                    .transition(.opacity)
-                    .guestModePrompt() // Show account prompt when guest tries cloud features
+                .zIndex(100) // Ensure it's above other content
             }
         }
         .animation(.easeInOut(duration: 0.3), value: authService.isAuthenticated)
         .animation(.easeInOut(duration: 0.3), value: hasCompletedOnboarding)
         .animation(.easeInOut(duration: 0.3), value: isCheckingAuth)
         .animation(.easeInOut(duration: 0.3), value: guestModeService.isGuestMode)
+        .animation(.easeInOut(duration: 0.3), value: showPasswordResetOverlay)
         .task {
             // Check for existing session on app launch
             await checkAuthentication()
+        }
+        // Track when password reset screen is shown for security timeout
+        .onChange(of: showPasswordResetOverlay) { _, isShowing in
+            if isShowing {
+                passwordResetStartTime = Date()
+            } else {
+                passwordResetStartTime = nil
+            }
+        }
+        // Security: Auto-dismiss password reset after timeout (5 minutes)
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            guard let startTime = passwordResetStartTime,
+                  showPasswordResetOverlay else { return }
+            
+            if Date().timeIntervalSince(startTime) > passwordResetTimeout {
+                // Security timeout - clear the pending result
+                deepLinkManager.clearPendingResult()
+                passwordResetStartTime = nil
+            }
         }
     }
     
@@ -213,7 +278,7 @@ struct AuthLoadingView: View {
                 .opacity(logoOpacity)
                 
                 // App name
-                Text("BiteWise")
+                Text("Taberoux")
                     .font(BWTypography.displayMedium)
                     .foregroundStyle(
                         LinearGradient(
@@ -240,7 +305,8 @@ struct AuthLoadingView: View {
     }
 }
 
-// Onboarding flow: Welcome → Pantry → Macro Goals → Signup → Completion
+// Onboarding flow: Welcome → Pantry → Macro Goals → Completion → Signup (auth at end)
+// This flow lets users experience value before asking for account creation
 struct OnboardingFlow: View {
     @StateObject private var navigationState = AppNavigationState()
     @ObservedObject private var authService = AuthService.shared
@@ -269,11 +335,23 @@ struct OnboardingFlow: View {
                 case .macroGoalsOnboarding:
                     MacroGoalsOnboardingScreen(
                         onContinue: {
-                            // Navigate to signup screen
-                            navigationState.navigateTo(.signup)
+                            // Navigate to completion screen (celebrate before auth)
+                            navigationState.navigateTo(.onboardingCompletion)
                         },
                         onSkip: {
-                            // Navigate to signup screen
+                            // Navigate to completion screen (celebrate before auth)
+                            navigationState.navigateTo(.onboardingCompletion)
+                        }
+                    )
+                
+                case .onboardingCompletion:
+                    OnboardingCompletionScreen(
+                        onComplete: {
+                            // Go to signup to save data
+                            navigationState.navigateTo(.signup)
+                        },
+                        onScanNow: {
+                            // Go to signup to save data (will scan after)
                             navigationState.navigateTo(.signup)
                         }
                     )
@@ -281,24 +359,12 @@ struct OnboardingFlow: View {
                 case .signup:
                     OnboardingAuthView(
                         onComplete: {
-                            // After successful signup, go to completion
-                            navigationState.navigateTo(.onboardingCompletion)
+                            // After successful signup, go to main app
+                            onComplete()
                         },
                         onSkip: {
                             // User chose to continue as guest
                             onSkipAuth?()
-                        }
-                    )
-                
-                case .onboardingCompletion:
-                    OnboardingCompletionScreen(
-                        onComplete: {
-                            // Go to dashboard
-                            onComplete()
-                        },
-                        onScanNow: {
-                            // Complete and go to scan tab
-                            onCompleteWithScan?() ?? onComplete()
                         }
                     )
                 

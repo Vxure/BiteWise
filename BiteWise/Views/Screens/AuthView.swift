@@ -9,6 +9,7 @@ import SwiftUI
 
 struct AuthView: View {
     @StateObject private var viewModel = AuthViewModel()
+    @EnvironmentObject private var deepLinkManager: DeepLinkStateManager
     @Environment(\.colorScheme) var colorScheme
     
     var onSkip: (() -> Void)?
@@ -49,9 +50,64 @@ struct AuthView: View {
                     insertion: .move(edge: .trailing).combined(with: .opacity),
                     removal: .move(edge: .leading).combined(with: .opacity)
                 ))
+                
+            case .awaitingMagicLink(let email):
+                CheckEmailView(
+                    email: email,
+                    isLoading: viewModel.isLoading,
+                    successMessage: viewModel.showSuccess ? viewModel.successMessage : nil,
+                    resendCooldown: viewModel.resendCooldownRemaining,
+                    resendButtonText: viewModel.resendButtonText,
+                    onResendEmail: {
+                        Task { await viewModel.resendMagicLink() }
+                    },
+                    onBackToLogin: {
+                        viewModel.backToLogin()
+                    },
+                    isMagicLink: true
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                
+            case .passwordResetPending(let email):
+                PasswordResetScreen(
+                    email: email,
+                    onComplete: {
+                        // After password reset, go to login
+                        viewModel.transitionToLogin()
+                    },
+                    onCancel: {
+                        viewModel.transitionToLogin()
+                    }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.authState)
+        // Forward relevant deep link results to AuthViewModel for state transitions
+        // DeepLinkStateManager is the single source of truth for deep link handling
+        .onChange(of: deepLinkManager.showSuccess) { _, showSuccess in
+            // When signup is confirmed, transition AuthViewModel to verified state
+            if showSuccess, case .signupConfirmed = getLastHandledResult() {
+                if case .awaitingEmailVerification(let email) = viewModel.authState {
+                    viewModel.transitionToVerifiedAwaitingLogin(email: email)
+                }
+            }
+        }
+    }
+    
+    /// Helper to determine what result was just handled based on success message
+    private func getLastHandledResult() -> DeepLinkResult? {
+        guard let message = deepLinkManager.successMessage else { return nil }
+        if message.contains("Email verified") {
+            return .signupConfirmed
+        }
+        return nil
     }
 }
 
@@ -60,6 +116,7 @@ struct AuthView: View {
 struct AuthFormView: View {
     @ObservedObject var viewModel: AuthViewModel
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.scenePhase) var scenePhase
     @FocusState private var focusedField: AuthField?
     
     var onSkip: (() -> Void)?
@@ -73,61 +130,94 @@ struct AuthFormView: View {
     // Forgot password state
     @State private var showForgotPassword = false
     
+    /// Whether keyboard is currently visible (for layout adjustments)
+    private var isKeyboardActive: Bool {
+        focusedField != nil
+    }
+    
     private enum AuthField {
         case name, email, password, confirmPassword
     }
     
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 0) {
-                Spacer(minLength: 60)
-                
-                // Logo section
-                AuthLogoView(scale: logoScale, opacity: logoOpacity)
-                    .padding(.bottom, 32)
-                
-                // Success banner (shown after email verification)
-                if viewModel.showSuccess, let message = viewModel.successMessage {
-                    SuccessBanner(message: message) {
-                        viewModel.clearSuccess()
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    Spacer(minLength: isKeyboardActive ? 20 : 60)
+                    
+                    // Logo section - smaller when keyboard is active
+                    if !isKeyboardActive {
+                        AuthLogoView(scale: logoScale, opacity: logoOpacity)
+                            .padding(.bottom, 32)
+                            .transition(.scale.combined(with: .opacity))
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 16)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    
+                    // Success banner (shown after email verification)
+                    if viewModel.showSuccess, let message = viewModel.successMessage {
+                        SuccessBanner(message: message) {
+                            viewModel.clearSuccess()
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 16)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    
+                    // Title
+                    titleSection
+                        .padding(.bottom, 8)
+                    
+                    // Subtitle - hide when keyboard is active to save space
+                    if !isKeyboardActive {
+                        subtitleSection
+                            .padding(.bottom, 32)
+                            .transition(.opacity)
+                    } else {
+                        Spacer().frame(height: 16)
+                    }
+                    
+                    // Auth form card
+                    authFormCard
+                        .padding(.horizontal, 24)
+                        .id("authForm")
+                    
+                    // Switch mode footer
+                    switchModeFooter
+                        .padding(.top, 24)
+                    
+                    // Skip / Guest mode option
+                    if let onSkip = onSkip {
+                        skipButton(action: onSkip)
+                            .padding(.top, 16)
+                    }
+                    
+                    Spacer(minLength: 40)
                 }
-                
-                // Title
-                titleSection
-                    .padding(.bottom, 8)
-                
-                // Subtitle
-                subtitleSection
-                    .padding(.bottom, 32)
-                
-                // Auth form card
-                authFormCard
-                    .padding(.horizontal, 24)
-                
-                // Switch mode footer
-                switchModeFooter
-                    .padding(.top, 24)
-                
-                // Skip / Guest mode option
-                if let onSkip = onSkip {
-                    skipButton(action: onSkip)
-                        .padding(.top, 16)
-                }
-                
-                Spacer(minLength: 40)
+                .padding(.bottom, 20)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isKeyboardActive)
             }
-            .padding(.bottom, 20)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: focusedField) { _, newField in
+                // Scroll to form when keyboard appears
+                if newField != nil {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        proxy.scrollTo("authForm", anchor: .center)
+                    }
+                }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
         .onAppear {
             startAnimations()
         }
         .onTapGesture {
             focusedField = nil
+        }
+        // Security: Clear password fields when app goes to background
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                viewModel.password = ""
+                viewModel.confirmPassword = ""
+                focusedField = nil
+            }
         }
     }
     
@@ -200,6 +290,11 @@ struct AuthFormView: View {
     
     // MARK: - Auth Form Card
     
+    /// Whether to show password field (signup mode OR login mode with password)
+    private var showPasswordField: Bool {
+        viewModel.isSignupMode || viewModel.usePasswordLogin
+    }
+    
     private var authFormCard: some View {
         VStack(spacing: 20) {
             // Mode picker
@@ -236,28 +331,41 @@ struct AuthFormView: View {
                     isSecure: false
                 )
                 .focused($focusedField, equals: .email)
-                .submitLabel(.next)
-                .onSubmit { focusedField = .password }
+                .submitLabel(showPasswordField ? .next : .go)
+                .onSubmit {
+                    if showPasswordField {
+                        focusedField = .password
+                    } else {
+                        // Magic link mode - submit directly
+                        Task { await viewModel.performAuthAction() }
+                    }
+                }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 
-                // Password field
-                AuthTextField(
-                    placeholder: "Password",
-                    text: $viewModel.password,
-                    icon: "lock.fill",
-                    keyboardType: .default,
-                    textContentType: viewModel.isLoginMode ? .password : .newPassword,
-                    isSecure: true
-                )
-                .focused($focusedField, equals: .password)
-                .submitLabel(viewModel.isSignupMode ? .next : .go)
-                .onSubmit {
-                    if viewModel.isSignupMode {
-                        focusedField = .confirmPassword
-                    } else {
-                        Task { await viewModel.performAuthAction() }
+                // Password field (signup mode OR login with password)
+                if showPasswordField {
+                    AuthTextField(
+                        placeholder: "Password",
+                        text: $viewModel.password,
+                        icon: "lock.fill",
+                        keyboardType: .default,
+                        textContentType: viewModel.isLoginMode ? .password : .newPassword,
+                        isSecure: true
+                    )
+                    .focused($focusedField, equals: .password)
+                    .submitLabel(viewModel.isSignupMode ? .next : .go)
+                    .onSubmit {
+                        if viewModel.isSignupMode {
+                            focusedField = .confirmPassword
+                        } else {
+                            Task { await viewModel.performAuthAction() }
+                        }
                     }
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
                 }
                 
                 // Confirm password (signup only)
@@ -281,7 +389,8 @@ struct AuthFormView: View {
                     ))
                 }
             }
-            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.authMode)
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.authMode)
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.usePasswordLogin)
             
             // Error message with contextual actions
             if viewModel.showError, let errorMessage = viewModel.errorMessage {
@@ -297,17 +406,29 @@ struct AuthFormView: View {
             primaryActionButton
                 .padding(.top, 8)
             
-            // Forgot password link (login mode only)
+            // Login mode toggle (magic link / password)
             if viewModel.isLoginMode {
                 Button {
-                    showForgotPassword = true
+                    viewModel.togglePasswordMode()
                 } label: {
-                    Text("Forgot Password?")
+                    Text(viewModel.usePasswordLogin ? "use magic link instead" : "use password instead")
                         .font(BWTypography.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(Color.bwPrimary)
+                        .foregroundColor(.secondary)
                 }
-                .padding(.top, 8)
+                .padding(.top, 4)
+                
+                // Forgot password link (only when in password mode)
+                if viewModel.usePasswordLogin {
+                    Button {
+                        showForgotPassword = true
+                    } label: {
+                        Text("Forgot Password?")
+                            .font(BWTypography.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(Color.bwPrimary)
+                    }
+                    .transition(.opacity)
+                }
             }
         }
         .padding(24)
@@ -389,7 +510,7 @@ struct AuthFormView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.9)
                 } else {
-                    Image(systemName: viewModel.isLoginMode ? "arrow.right" : "person.badge.plus")
+                    Image(systemName: viewModel.primaryButtonIcon)
                         .font(.system(size: 17, weight: .semibold))
                     
                     Text(viewModel.primaryButtonTitle)
@@ -468,6 +589,7 @@ struct CheckEmailView: View {
     let resendButtonText: String
     let onResendEmail: () -> Void
     let onBackToLogin: () -> Void
+    var isMagicLink: Bool = false
     
     @Environment(\.colorScheme) var colorScheme
     
@@ -480,6 +602,18 @@ struct CheckEmailView: View {
     /// Whether resend is disabled (loading or cooling down)
     private var isResendDisabled: Bool {
         isLoading || resendCooldown > 0
+    }
+    
+    /// Text for the description based on whether this is magic link or verification
+    private var descriptionText: String {
+        isMagicLink ? "We sent a sign-in link to" : "We sent a verification link to"
+    }
+    
+    /// Text for the instruction based on whether this is magic link or verification
+    private var instructionText: String {
+        isMagicLink 
+            ? "Tap the link in your email to sign in" 
+            : "Tap the link in your email to verify your account"
     }
     
     var body: some View {
@@ -514,7 +648,7 @@ struct CheckEmailView: View {
             
             // Description
             VStack(spacing: 8) {
-                Text("We sent a verification link to")
+                Text(descriptionText)
                     .font(BWTypography.bodySecondary)
                     .foregroundColor(.secondary)
                 
@@ -528,7 +662,7 @@ struct CheckEmailView: View {
             .padding(.bottom, 24)
             
             // Instruction
-            Text("Tap the link in your email to verify your account")
+            Text(instructionText)
                 .font(BWTypography.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -966,6 +1100,8 @@ struct AuthTextField: View {
 struct OnboardingAuthView: View {
     @StateObject private var viewModel: AuthViewModel
     @ObservedObject private var authService = AuthService.shared
+    @ObservedObject private var guestModeService = GuestModeService.shared
+    @EnvironmentObject private var deepLinkManager: DeepLinkStateManager
     @Environment(\.colorScheme) var colorScheme
     
     var onComplete: () -> Void
@@ -1010,12 +1146,59 @@ struct OnboardingAuthView: View {
                     insertion: .move(edge: .trailing).combined(with: .opacity),
                     removal: .move(edge: .leading).combined(with: .opacity)
                 ))
+                
+            case .awaitingMagicLink(let email):
+                CheckEmailView(
+                    email: email,
+                    isLoading: viewModel.isLoading,
+                    successMessage: viewModel.showSuccess ? viewModel.successMessage : nil,
+                    resendCooldown: viewModel.resendCooldownRemaining,
+                    resendButtonText: viewModel.resendButtonText,
+                    onResendEmail: {
+                        Task { await viewModel.resendMagicLink() }
+                    },
+                    onBackToLogin: {
+                        viewModel.backToLogin()
+                    },
+                    isMagicLink: true
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                
+            case .passwordResetPending(let email):
+                PasswordResetScreen(
+                    email: email,
+                    onComplete: {
+                        viewModel.transitionToLogin()
+                    },
+                    onCancel: {
+                        viewModel.transitionToLogin()
+                    }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.authState)
         .navigationBarBackButtonHidden(false)
         .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
             if isAuthenticated {
+                // Migrate guest data if user was previously a guest
+                // This pushes local data to Supabase before loading cloud data
+                if guestModeService.wasInGuestMode {
+                    Task {
+                        let migrationSucceeded = await DataManager.shared.migrateGuestDataOnFirstAuth()
+                        // Only clear flag if migration succeeded, so it can be retried on failure
+                        if migrationSucceeded {
+                            guestModeService.clearWasInGuestMode()
+                        }
+                    }
+                }
+                
                 // Update local profile with auth user data (for login flow)
                 if let user = authService.currentUser {
                     var profile = DataManager.shared.userProfile
@@ -1038,6 +1221,16 @@ struct OnboardingAuthView: View {
                 onComplete()
             }
         }
+        // Forward relevant deep link results to AuthViewModel for state transitions
+        // DeepLinkStateManager is the single source of truth for deep link handling
+        .onChange(of: deepLinkManager.showSuccess) { _, showSuccess in
+            // When signup is confirmed, transition AuthViewModel to verified state
+            if showSuccess, let message = deepLinkManager.successMessage, message.contains("Email verified") {
+                if case .awaitingEmailVerification(let email) = viewModel.authState {
+                    viewModel.transitionToVerifiedAwaitingLogin(email: email)
+                }
+            }
+        }
     }
 }
 
@@ -1046,6 +1239,7 @@ struct OnboardingAuthView: View {
 struct OnboardingAuthFormView: View {
     @ObservedObject var viewModel: AuthViewModel
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.scenePhase) var scenePhase
     @FocusState private var focusedField: OnboardingAuthField?
     
     var onSkip: (() -> Void)?
@@ -1059,65 +1253,98 @@ struct OnboardingAuthFormView: View {
     // Forgot password state
     @State private var showForgotPassword = false
     
+    /// Whether keyboard is currently visible (for layout adjustments)
+    private var isKeyboardActive: Bool {
+        focusedField != nil
+    }
+    
     private enum OnboardingAuthField {
         case name, email, password, confirmPassword
     }
     
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 0) {
-                Spacer(minLength: 40)
-                
-                // Progress indicator
-                progressIndicator
-                    .padding(.bottom, 24)
-                
-                // Logo section (smaller for onboarding)
-                smallLogoSection
-                    .padding(.bottom, 24)
-                
-                // Success banner (shown after email verification)
-                if viewModel.showSuccess, let message = viewModel.successMessage {
-                    SuccessBanner(message: message) {
-                        viewModel.clearSuccess()
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    Spacer(minLength: isKeyboardActive ? 16 : 40)
+                    
+                    // Progress indicator
+                    progressIndicator
+                        .padding(.bottom, isKeyboardActive ? 12 : 24)
+                    
+                    // Logo section (smaller for onboarding) - hide when keyboard active
+                    if !isKeyboardActive {
+                        smallLogoSection
+                            .padding(.bottom, 24)
+                            .transition(.scale.combined(with: .opacity))
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 16)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    
+                    // Success banner (shown after email verification)
+                    if viewModel.showSuccess, let message = viewModel.successMessage {
+                        SuccessBanner(message: message) {
+                            viewModel.clearSuccess()
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 16)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    
+                    // Title
+                    titleSection
+                        .padding(.bottom, 8)
+                    
+                    // Subtitle - hide when keyboard is active
+                    if !isKeyboardActive {
+                        subtitleSection
+                            .padding(.bottom, 28)
+                            .transition(.opacity)
+                    } else {
+                        Spacer().frame(height: 12)
+                    }
+                    
+                    // Auth form card
+                    authFormCard
+                        .padding(.horizontal, 24)
+                        .id("onboardingAuthForm")
+                    
+                    // Switch mode footer
+                    switchModeFooter
+                        .padding(.top, 20)
+                    
+                    // Skip / Guest mode option
+                    if let onSkip = onSkip {
+                        skipButton(action: onSkip)
+                            .padding(.top, 16)
+                    }
+                    
+                    Spacer(minLength: 40)
                 }
-                
-                // Title
-                titleSection
-                    .padding(.bottom, 8)
-                
-                // Subtitle
-                subtitleSection
-                    .padding(.bottom, 28)
-                
-                // Auth form card
-                authFormCard
-                    .padding(.horizontal, 24)
-                
-                // Switch mode footer
-                switchModeFooter
-                    .padding(.top, 20)
-                
-                // Skip / Guest mode option
-                if let onSkip = onSkip {
-                    skipButton(action: onSkip)
-                        .padding(.top, 16)
-                }
-                
-                Spacer(minLength: 40)
+                .padding(.bottom, 20)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isKeyboardActive)
             }
-            .padding(.bottom, 20)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: focusedField) { _, newField in
+                // Scroll to form when keyboard appears
+                if newField != nil {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        proxy.scrollTo("onboardingAuthForm", anchor: .center)
+                    }
+                }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
         .onAppear {
             startAnimations()
         }
         .onTapGesture {
             focusedField = nil
+        }
+        // Security: Clear password fields when app goes to background
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                viewModel.password = ""
+                viewModel.confirmPassword = ""
+                focusedField = nil
+            }
         }
     }
     
@@ -1227,6 +1454,11 @@ struct OnboardingAuthFormView: View {
     
     // MARK: - Auth Form Card
     
+    /// Whether to show password field (signup mode OR login mode with password)
+    private var showPasswordField: Bool {
+        viewModel.isSignupMode || viewModel.usePasswordLogin
+    }
+    
     private var authFormCard: some View {
         VStack(spacing: 18) {
             // Mode picker
@@ -1261,27 +1493,41 @@ struct OnboardingAuthFormView: View {
                     isSecure: false
                 )
                 .focused($focusedField, equals: .email)
-                .submitLabel(.next)
-                .onSubmit { focusedField = .password }
+                .submitLabel(showPasswordField ? .next : .go)
+                .onSubmit {
+                    if showPasswordField {
+                        focusedField = .password
+                    } else {
+                        // Magic link mode - submit directly
+                        Task { await viewModel.performAuthAction() }
+                    }
+                }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 
-                AuthTextField(
-                    placeholder: "Password",
-                    text: $viewModel.password,
-                    icon: "lock.fill",
-                    keyboardType: .default,
-                    textContentType: viewModel.isLoginMode ? .password : .newPassword,
-                    isSecure: true
-                )
-                .focused($focusedField, equals: .password)
-                .submitLabel(viewModel.isSignupMode ? .next : .go)
-                .onSubmit {
-                    if viewModel.isSignupMode {
-                        focusedField = .confirmPassword
-                    } else {
-                        Task { await viewModel.performAuthAction() }
+                // Password field (signup mode OR login with password)
+                if showPasswordField {
+                    AuthTextField(
+                        placeholder: "Password",
+                        text: $viewModel.password,
+                        icon: "lock.fill",
+                        keyboardType: .default,
+                        textContentType: viewModel.isLoginMode ? .password : .newPassword,
+                        isSecure: true
+                    )
+                    .focused($focusedField, equals: .password)
+                    .submitLabel(viewModel.isSignupMode ? .next : .go)
+                    .onSubmit {
+                        if viewModel.isSignupMode {
+                            focusedField = .confirmPassword
+                        } else {
+                            Task { await viewModel.performAuthAction() }
+                        }
                     }
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
                 }
                 
                 if viewModel.isSignupMode {
@@ -1304,7 +1550,8 @@ struct OnboardingAuthFormView: View {
                     ))
                 }
             }
-            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.authMode)
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.authMode)
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.usePasswordLogin)
             
             // Error message with contextual actions
             if viewModel.showError, let errorMessage = viewModel.errorMessage {
@@ -1320,17 +1567,29 @@ struct OnboardingAuthFormView: View {
             primaryActionButton
                 .padding(.top, 6)
             
-            // Forgot password link (login mode only)
+            // Login mode toggle (magic link / password)
             if viewModel.isLoginMode {
                 Button {
-                    showForgotPassword = true
+                    viewModel.togglePasswordMode()
                 } label: {
-                    Text("Forgot Password?")
+                    Text(viewModel.usePasswordLogin ? "use magic link instead" : "use password instead")
                         .font(BWTypography.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(Color.bwPrimary)
+                        .foregroundColor(.secondary)
                 }
-                .padding(.top, 6)
+                .padding(.top, 4)
+                
+                // Forgot password link (only when in password mode)
+                if viewModel.usePasswordLogin {
+                    Button {
+                        showForgotPassword = true
+                    } label: {
+                        Text("Forgot Password?")
+                            .font(BWTypography.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(Color.bwPrimary)
+                    }
+                    .transition(.opacity)
+                }
             }
         }
         .padding(22)
@@ -1421,6 +1680,15 @@ struct OnboardingAuthFormView: View {
     
     // MARK: - Primary Action Button
     
+    /// Button title for onboarding - uses "Create Account" for signup instead of "Sign Up"
+    private var onboardingButtonTitle: String {
+        if viewModel.isLoading { return "" }
+        if viewModel.isLoginMode {
+            return viewModel.usePasswordLogin ? "Sign In" : "Sign in with email"
+        }
+        return "Create Account"
+    }
+    
     private var primaryActionButton: some View {
         Button {
             focusedField = nil
@@ -1432,10 +1700,10 @@ struct OnboardingAuthFormView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.9)
                 } else {
-                    Image(systemName: viewModel.isLoginMode ? "arrow.right" : "checkmark.circle.fill")
+                    Image(systemName: viewModel.primaryButtonIcon)
                         .font(.system(size: 17, weight: .semibold))
                     
-                    Text(viewModel.isLoginMode ? "Sign In" : "Create Account")
+                    Text(onboardingButtonTitle)
                         .font(BWTypography.buttonLabel)
                 }
             }

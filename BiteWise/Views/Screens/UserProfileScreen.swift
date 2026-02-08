@@ -21,11 +21,18 @@ struct UserProfileScreen: View {
     
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var authService = AuthService.shared
+    @ObservedObject private var guestModeService = GuestModeService.shared
+    @AppStorage("isGuestMode") private var isGuestMode: Bool = false
     @Environment(\.colorScheme) var colorScheme
     @FocusState private var isNameFocused: Bool
     @FocusState private var focusedPasswordField: PasswordField?
     
     var onDone: () -> Void
+    
+    /// Check if user is in guest mode
+    private var isGuest: Bool {
+        !authService.isAuthenticated && isGuestMode
+    }
     
     private enum PasswordField {
         case current, new, confirm
@@ -54,9 +61,17 @@ struct UserProfileScreen: View {
                     profileHeaderSection
                         .staggeredAppear(index: 0)
                     
-                    // MARK: - Account Info
-                    accountInfoSection
-                        .staggeredAppear(index: 1)
+                    // MARK: - Guest Sign In Section (only for guests)
+                    if isGuest {
+                        guestSignInSection
+                            .staggeredAppear(index: 1)
+                    }
+                    
+                    // MARK: - Account Info (only for authenticated users)
+                    if !isGuest {
+                        accountInfoSection
+                            .staggeredAppear(index: 1)
+                    }
                     
                     // MARK: - Change Password (only for authenticated users)
                     if authService.isAuthenticated {
@@ -64,16 +79,18 @@ struct UserProfileScreen: View {
                             .staggeredAppear(index: 2)
                     }
                     
-                    // MARK: - Save Button
-                    GradientButton(
-                        icon: isSaving ? nil : "checkmark.circle.fill",
-                        text: isSaving ? "Saving..." : "Save Profile",
-                        action: saveAndDone
-                    )
-                    .disabled(isSaving)
-                    .opacity(isSaving ? 0.7 : 1.0)
-                    .padding(.top, 8)
-                    .staggeredAppear(index: 3)
+                    // MARK: - Save Button (only for authenticated users)
+                    if !isGuest {
+                        GradientButton(
+                            icon: isSaving ? nil : "checkmark.circle.fill",
+                            text: isSaving ? "Saving..." : "Save Profile",
+                            action: saveAndDone
+                        )
+                        .disabled(isSaving)
+                        .opacity(isSaving ? 0.7 : 1.0)
+                        .padding(.top, 8)
+                        .staggeredAppear(index: 3)
+                    }
                     
                     // MARK: - Delete Account (only for authenticated users)
                     if authService.isAuthenticated {
@@ -143,7 +160,10 @@ struct UserProfileScreen: View {
     
     // MARK: - Profile Header Section
     private var profileHeaderSection: some View {
-        VStack(spacing: 16) {
+        let displayName = isGuest ? "Guest" : profile.name
+        let displayInitial = isGuest ? "G" : String(profile.name.prefix(1)).uppercased()
+        
+        return VStack(spacing: 16) {
             // Avatar with gradient background
             ZStack {
                 Circle()
@@ -158,65 +178,72 @@ struct UserProfileScreen: View {
                     .shadow(color: Color.bwPrimary.opacity(0.3), radius: 12, x: 0, y: 6)
                 
                 // User initial
-                Text(String(profile.name.prefix(1)).uppercased())
+                Text(displayInitial)
                     .font(.system(size: 36, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
             
-            // User name with edit capability
-            HStack(spacing: 8) {
-                if isEditingName {
-                    TextField("Your name", text: $profile.name)
-                        .font(BWTypography.sectionHeader)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.center)
-                        .focused($isNameFocused)
-                        .submitLabel(.done)
-                        .onSubmit {
-                            isEditingName = false
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color(.tertiarySystemBackground))
-                        )
-                        .adaptiveShadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.3), lineWidth: 1)
-                        )
-                } else {
-                    Text(profile.name)
-                        .font(BWTypography.sectionHeader)
-                        .foregroundColor(.primary)
-                }
-                
-                Button(action: {
-                    BWHaptics.lightImpact()
+            // User name with edit capability (only for authenticated users)
+            if isGuest {
+                // Guest mode - just show "Guest" label
+                Text(displayName)
+                    .font(BWTypography.sectionHeader)
+                    .foregroundColor(.primary)
+            } else {
+                HStack(spacing: 8) {
                     if isEditingName {
-                        // Save and close
-                        isEditingName = false
-                        isNameFocused = false
+                        TextField("Your name", text: $profile.name)
+                            .font(BWTypography.sectionHeader)
+                            .foregroundColor(.primary)
+                            .multilineTextAlignment(.center)
+                            .focused($isNameFocused)
+                            .submitLabel(.done)
+                            .onSubmit {
+                                isEditingName = false
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color(.tertiarySystemBackground))
+                            )
+                            .adaptiveShadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.3), lineWidth: 1)
+                            )
                     } else {
-                        // Start editing
-                        isEditingName = true
-                        isNameFocused = true
+                        Text(displayName)
+                            .font(BWTypography.sectionHeader)
+                            .foregroundColor(.primary)
                     }
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(isEditingName ? Color.bwPrimary : Color.bwPrimary.opacity(0.1))
-                            .frame(width: 32, height: 32)
-                        
-                        Image(systemName: isEditingName ? "checkmark" : "pencil")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(isEditingName ? .white : Color.bwPrimary)
+                    
+                    Button(action: {
+                        BWHaptics.lightImpact()
+                        if isEditingName {
+                            // Save and close
+                            isEditingName = false
+                            isNameFocused = false
+                        } else {
+                            // Start editing
+                            isEditingName = true
+                            isNameFocused = true
+                        }
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(isEditingName ? Color.bwPrimary : Color.bwPrimary.opacity(0.1))
+                                .frame(width: 32, height: 32)
+                            
+                            Image(systemName: isEditingName ? "checkmark" : "pencil")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(isEditingName ? .white : Color.bwPrimary)
+                        }
                     }
+                    .buttonStyle(.bwPressable)
                 }
-                .buttonStyle(.bwPressable)
+                .animation(.bwSnappy, value: isEditingName)
             }
-            .animation(.bwSnappy, value: isEditingName)
         }
         .frame(maxWidth: .infinity)
         .bwCardStyle(padding: 24, cornerRadius: 24)
@@ -533,6 +560,71 @@ struct UserProfileScreen: View {
     
     private var canDelete: Bool {
         deleteConfirmText == "DELETE"
+    }
+    
+    // MARK: - Guest Sign In Section
+    private var guestSignInSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section header
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(Color.bwPrimary.opacity(0.12))
+                        .frame(width: 36, height: 36)
+                    
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color.bwPrimary)
+                }
+                
+                Text("Account")
+                    .font(BWTypography.cardTitle)
+            }
+            
+            // Sign in button
+            Button {
+                BWHaptics.lightImpact()
+                // Disable guest mode to show auth screen
+                isGuestMode = false
+                guestModeService.disableGuestMode()
+            } label: {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.bwPrimary.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        
+                        Image(systemName: "person.crop.circle.badge.plus")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color.bwPrimary)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Sign In")
+                            .font(BWTypography.bodyPrimary)
+                            .foregroundColor(Color.bwPrimary)
+                        
+                        Text("Create an account to save your data")
+                            .font(BWTypography.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color(.tertiarySystemBackground))
+                )
+            }
+            .buttonStyle(.bwPressable)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bwCardStyle(padding: 20, cornerRadius: 24)
     }
     
     // MARK: - Actions

@@ -34,7 +34,7 @@ extension ActivityItem {
         case .ratedRecipe:
             return "star.fill"
         case .favoritedRecipe:
-            return "heart.fill"
+            return "bookmark.fill"
         case .submittedFeedback:
             return "bubble.left.and.bubble.right.fill"
         }

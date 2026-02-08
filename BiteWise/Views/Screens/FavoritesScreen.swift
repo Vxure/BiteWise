@@ -27,7 +27,7 @@ struct FavoritesScreen: View {
                 VStack(alignment: .leading, spacing: 20) {
                     // Header
                     HStack {
-                        Text("My Favorites")
+                        Text("Saved Recipes")
                             .font(BWTypography.sectionHeader)
                         
                         Spacer()
@@ -48,7 +48,7 @@ struct FavoritesScreen: View {
                         // Recipe cards
                         LazyVStack(spacing: 16) {
                             ForEach(favoriteRecipes) { recipe in
-                                FavoriteRecipeCard(recipe: recipe) {
+                                SavedRecipeCard(recipe: recipe) {
                                     navigationState.navigateTo(.recipeDetail(recipe))
                                 }
                             }
@@ -98,17 +98,17 @@ struct FavoritesScreen: View {
                     .fill(Color.bwAccent.opacity(0.1))
                     .frame(width: 120, height: 120)
                 
-                Image(systemName: "star.fill")
+                Image(systemName: "bookmark.fill")
                     .font(.system(size: 50, weight: .medium))
                     .foregroundColor(Color.bwAccent.opacity(0.4))
             }
             
             VStack(spacing: 8) {
-                Text("No favorites yet")
+                Text("No saved recipes yet")
                     .font(BWTypography.cardTitle)
                     .foregroundColor(.primary)
                 
-                Text("Save recipes you love by tapping\nthe star icon on any recipe")
+                Text("Save recipes you love by tapping\nthe bookmark icon on any recipe")
                     .font(BWTypography.bodySecondary)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -118,8 +118,8 @@ struct FavoritesScreen: View {
     }
 }
 
-// Card component for favorite recipes
-struct FavoriteRecipeCard: View {
+// Card component for saved recipes
+struct SavedRecipeCard: View {
     let recipe: Recipe
     let onTap: () -> Void
     @ObservedObject private var dataManager = DataManager.shared
@@ -191,14 +191,14 @@ struct FavoriteRecipeCard: View {
                 
                 Spacer()
                 
-                // Favorite button
+                // Save button
                 Button(action: {
                     BWHaptics.mediumImpact()
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                         dataManager.toggleFavorite(recipe)
                     }
                 }) {
-                    Image(systemName: "star.fill")
+                    Image(systemName: "bookmark.fill")
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(Color.bwAccent)
                 }

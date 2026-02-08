@@ -103,7 +103,7 @@ struct RecipeDetailScreen: View {
                                 .foregroundColor(recipeColor)
                         }
                         
-                        // Favorite star button
+                        // Save bookmark button
                         Button(action: {
                             BWHaptics.mediumImpact()
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
@@ -116,7 +116,7 @@ struct RecipeDetailScreen: View {
                                     .frame(width: 44, height: 44)
                                     .adaptiveShadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                                 
-                                Image(systemName: isFavorite ? "star.fill" : "star")
+                                Image(systemName: isFavorite ? "bookmark.fill" : "bookmark")
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
                                     .scaleEffect(isFavorite ? 1.1 : 1.0)

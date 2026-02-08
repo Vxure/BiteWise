@@ -12,6 +12,7 @@ struct DashboardView: View {
     @EnvironmentObject private var navigationState: AppNavigationState
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var authService = AuthService.shared
+    @ObservedObject private var guestModeService = GuestModeService.shared
     @Environment(\.colorScheme) var colorScheme
     @State private var isVisible = false
     @AppStorage("hasSeenWelcomeHint") private var hasSeenWelcomeHint: Bool = false
@@ -185,6 +186,17 @@ struct DashboardView: View {
             // Load data from cloud if authenticated and haven't loaded yet
             if authService.isAuthenticated && !hasLoadedFromCloud {
                 hasLoadedFromCloud = true
+                
+                // Migrate guest data BEFORE loading from cloud
+                // This is a fallback for the AuthView returning user flow
+                if guestModeService.wasInGuestMode {
+                    let migrationSucceeded = await dataManager.migrateGuestDataOnFirstAuth()
+                    // Only clear flag if migration succeeded, so it can be retried on failure
+                    if migrationSucceeded {
+                        guestModeService.clearWasInGuestMode()
+                    }
+                }
+                
                 await dataManager.loadFromCloud()
             }
         }
@@ -251,7 +263,7 @@ struct DashboardView: View {
             
             Spacer()
             
-            // Favorites button
+            // Saved recipes button
             Button(action: {
                 BWHaptics.lightImpact()
                 navigationState.navigateTo(.favorites)
@@ -262,7 +274,7 @@ struct DashboardView: View {
                         .frame(width: 44, height: 44)
                         .adaptiveShadow(color: Color.bwAdaptiveAccent(for: colorScheme).opacity(0.1), radius: 8, x: 0, y: 4)
                     
-                    Image(systemName: dataManager.hasFavorites ? "star.fill" : "star")
+                    Image(systemName: dataManager.hasFavorites ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
                 }
@@ -291,8 +303,10 @@ struct DashboardView: View {
     
     // MARK: - Greeting Header
     private var greetingHeaderSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(greetingEmoji) Good \(timeOfDay), \(dataManager.userProfile.name.isEmpty ? "there" : dataManager.userProfile.name)!")
+        let displayName = dataManager.userProfile.name
+        
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("\(greetingEmoji) Good \(timeOfDay)\(displayName.isEmpty ? "!" : ", \(displayName)!")")
                 .font(BWTypography.cardTitle)
                 .foregroundColor(.primary)
             
@@ -421,14 +435,14 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.bwPressable)
                 
-                // My Favorites
+                // Saved Recipes
                 Button(action: {
                     BWHaptics.mediumImpact()
                     navigationState.navigateTo(.favorites)
                 }) {
                     quickActionButton(
-                        icon: "star.fill",
-                        title: "Favorites",
+                        icon: "bookmark.fill",
+                        title: "Saved",
                         subtitle: "\(dataManager.favoriteRecipes.count) saved",
                         color: Color.bwProtein
                     )
@@ -478,11 +492,11 @@ struct DashboardView: View {
         .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
     }
     
-    // MARK: - Favorites Preview
+    // MARK: - Saved Recipes Preview
     private var favoritesPreviewSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Your Favorites")
+                Text("Saved Recipes")
                     .font(BWTypography.cardTitle)
                 
                 Spacer()
@@ -523,17 +537,17 @@ struct DashboardView: View {
                             .fill(Color.bwAccent.opacity(0.1))
                             .frame(width: 50, height: 50)
                         
-                        Image(systemName: "star")
+                        Image(systemName: "bookmark")
                             .font(.system(size: 22, weight: .medium))
                             .foregroundColor(Color.bwAccent.opacity(0.5))
                     }
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("No favorites yet")
+                        Text("No saved recipes yet")
                             .font(BWTypography.bodyPrimary)
                             .fontWeight(.medium)
                         
-                        Text("Save recipes you love by tapping the star icon")
+                        Text("Save recipes you love by tapping the bookmark icon")
                             .font(BWTypography.captionSmall)
                             .foregroundColor(.secondary)
                     }
@@ -564,7 +578,7 @@ struct DashboardView: View {
                     )
                     .frame(height: 80)
                 
-                Image(systemName: "star.fill")
+                Image(systemName: "bookmark.fill")
                     .font(.system(size: 26, weight: .medium))
                     .foregroundColor(Color.bwAccent)
             }
