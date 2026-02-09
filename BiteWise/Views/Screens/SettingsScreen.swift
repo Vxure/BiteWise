@@ -69,9 +69,9 @@ struct SettingsView: View {
                     }
                     .frame(height: 0)
                     
-                    // Spacer for the floating header
+                    // Spacer for the floating header (reduced to start content closer to fade)
                     Color.clear
-                        .frame(height: headerHeight)
+                        .frame(height: headerHeight - 30)
                     
                     // Appearance Section
                     VStack(alignment: .leading, spacing: 12) {
@@ -215,7 +215,7 @@ struct SettingsView: View {
                 headerSection
                     .padding(.top, 8)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 12)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(BWGradients.headerFadeGradient(for: colorScheme))

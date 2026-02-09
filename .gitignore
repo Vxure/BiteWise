@@ -38,6 +38,9 @@ BiteWise/Services/APIConfiguration.swift
 Secrets.xcconfig
 **/Secrets.xcconfig
 
+# Internal planning docs (not for version control)
+cron_setup_plan.md
+
 # Swift Package Manager
 #
 # It's a recommended practice to commit the Package.resolved file, 

@@ -22,6 +22,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Request limits / timeouts
+const MAX_BODY_BYTES = 16 * 1024; // 16 KB
+const REQUEST_TIMEOUT_MS = 10_000; // 10 seconds
+
 // Rate limit configuration
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_REQUESTS_PER_IP = 5;
@@ -36,6 +40,62 @@ interface RateLimitEntry {
 
 const ipRateLimits = new Map<string, RateLimitEntry>();
 const emailRateLimits = new Map<string, RateLimitEntry>();
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Request timed out")), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+async function parseJsonBody(req: Request): Promise<{ ok: true; data: any } | { ok: false; response: Response }> {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_BODY_BYTES) {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  const bodyBuffer = await req.arrayBuffer();
+  if (bodyBuffer.byteLength > MAX_BODY_BYTES) {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  if (bodyBuffer.byteLength === 0) {
+    return { ok: true, data: {} };
+  }
+
+  try {
+    const text = new TextDecoder().decode(bodyBuffer);
+    return { ok: true, data: JSON.parse(text) };
+  } catch {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+}
 
 // Structured logging
 function log(level: "info" | "warn" | "error", event: string, details?: Record<string, unknown>): void {
@@ -128,16 +188,14 @@ serve(async (req) => {
   let email: string;
   let redirectTo: string | undefined;
 
-  try {
-    const body = await req.json();
-    email = body.email;
-    redirectTo = body.redirect_to;
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid request body" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  const bodyResult = await parseJsonBody(req);
+  if (!bodyResult.ok) {
+    return bodyResult.response;
   }
+
+  const body = bodyResult.data ?? {};
+  email = body.email;
+  redirectTo = body.redirect_to;
 
   if (!email || typeof email !== "string") {
     return new Response(JSON.stringify({ error: "Email is required" }), {
@@ -201,9 +259,12 @@ serve(async (req) => {
 
   try {
     // Send password reset email
-    const { error } = await adminClient.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: redirectTo || undefined,
-    });
+    const { error } = await withTimeout(
+      adminClient.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: redirectTo || undefined,
+      }),
+      REQUEST_TIMEOUT_MS
+    );
 
     if (error) {
       // Log the error but return neutral response

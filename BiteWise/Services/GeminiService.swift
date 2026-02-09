@@ -158,10 +158,11 @@ class GeminiService {
         
         // Macro budget (compact)
         var budgetText = ""
-        let dataManager = DataManager.shared
-        let todayMacros = dataManager.dailyMacros
+        let (todayMacros, goals) = await MainActor.run {
+            let dataManager = DataManager.shared
+            return (dataManager.dailyMacros, dataManager.macroGoalsInGrams)
+        }
         if todayMacros.caloriesConsumed > 0 && userProfile.hasMacroGoals {
-            let goals = dataManager.macroGoalsInGrams
             let calRemaining = max(0, goals.calories - todayMacros.caloriesConsumed)
             budgetText = "Remaining budget: ~\(calRemaining)cal"
         }
@@ -214,13 +215,22 @@ class GeminiService {
         guard AppSettings.shared.shouldUseRealAPI else {
             logger.debug("Demo Mode: Returning mock chat response")
             try await Task.sleep(nanoseconds: 1_000_000_000)
-            return generateMockChatResponse(for: message, context: context, userProfile: userProfile)
+            return await generateMockChatResponse(for: message, context: context, userProfile: userProfile)
         }
         
         logger.info("Calling Gemini API for chat")
         
-        // Build system context
-        let systemContext = context.buildChatContext(userProfile: userProfile)
+        // Build system context (from main actor)
+        let (systemContext, chatHistory) = await MainActor.run {
+            let systemContext = context.buildChatContext(userProfile: userProfile)
+            let chatHistory: [ChatMessage]
+            if let recipe = context.currentRecipeContext {
+                chatHistory = context.getChatHistory(for: recipe.id)
+            } else {
+                chatHistory = context.generalChatHistory
+            }
+            return (systemContext, chatHistory)
+        }
         
         // Build conversation history
         var conversationParts: [[String: Any]] = []
@@ -234,14 +244,6 @@ class GeminiService {
             "role": "model",
             "parts": [["text": "I understand. I'm ready to help with cooking and recipe questions based on the available ingredients and user preferences."]]
         ])
-        
-        // Get the appropriate chat history based on current context
-        let chatHistory: [ChatMessage]
-        if let recipe = context.currentRecipeContext {
-            chatHistory = context.getChatHistory(for: recipe.id)
-        } else {
-            chatHistory = context.generalChatHistory
-        }
         
         // Add conversation history
         for chatMessage in chatHistory {
@@ -287,11 +289,23 @@ class GeminiService {
         userProfile: UserProfile,
         baseRecipe: Recipe? = nil
     ) async throws -> Recipe {
+        let (selectedIngredientNames, detectedIngredients, currentRecipeContext, hasFridgeItems, fridgeItems, pantryItems) = await MainActor.run {
+            let dataManager = DataManager.shared
+            return (
+                context.selectedIngredientNames,
+                context.detectedIngredients,
+                context.currentRecipeContext,
+                dataManager.hasFridgeItems,
+                dataManager.fridgeItems,
+                dataManager.pantryItems
+            )
+        }
+
         // SAFETY CHECK: Demo mode bypass
         guard AppSettings.shared.shouldUseRealAPI else {
             logger.debug("Demo Mode: Returning generated demo recipe")
             try await Task.sleep(nanoseconds: 1_000_000_000)
-            return generateMockRecipeFromChat(description: description, context: context, userProfile: userProfile, baseRecipe: baseRecipe)
+            return generateMockRecipeFromChat(description: description, currentRecipeContext: currentRecipeContext, baseRecipe: baseRecipe)
         }
         
         logger.info("Calling Gemini API for chat recipe generation")
@@ -301,22 +315,21 @@ class GeminiService {
         let preferencesText = userProfile.dietaryPreferences.isEmpty ? "" : userProfile.dietaryPreferences.joined(separator: ", ")
         
         // Available ingredients (prioritized)
-        let dataManager = DataManager.shared
         var ingredientsText = ""
-        if !context.selectedIngredientNames.isEmpty {
-            ingredientsText = context.selectedIngredientNames.joined(separator: ", ")
-        } else if !context.detectedIngredients.isEmpty {
-            ingredientsText = context.detectedIngredients.map { $0.name }.joined(separator: ", ")
-        } else if dataManager.hasFridgeItems {
-            ingredientsText = dataManager.fridgeItems.prefix(15).map { $0.name }.joined(separator: ", ")
+        if !selectedIngredientNames.isEmpty {
+            ingredientsText = selectedIngredientNames.joined(separator: ", ")
+        } else if !detectedIngredients.isEmpty {
+            ingredientsText = detectedIngredients.map { $0.name }.joined(separator: ", ")
+        } else if hasFridgeItems {
+            ingredientsText = fridgeItems.prefix(15).map { $0.name }.joined(separator: ", ")
         }
         
         // Pantry (compact)
-        let pantryText = dataManager.pantryItems.isEmpty ? "" : dataManager.pantryItems.prefix(10).map { $0.name }.joined(separator: ", ")
+        let pantryText = pantryItems.isEmpty ? "" : pantryItems.prefix(10).map { $0.name }.joined(separator: ", ")
         
         // Base recipe context if modifying (compact)
         var baseRecipeText = ""
-        if let base = baseRecipe ?? context.currentRecipeContext {
+        if let base = baseRecipe ?? currentRecipeContext {
             baseRecipeText = """
             
             MODIFY: \(base.title)
@@ -614,14 +627,13 @@ class GeminiService {
     /// Generate a mock recipe for demo mode based on chat context
     private func generateMockRecipeFromChat(
         description: String,
-        context: SessionContext,
-        userProfile: UserProfile,
+        currentRecipeContext: Recipe?,
         baseRecipe: Recipe?
     ) -> Recipe {
         let lowercased = description.lowercased()
         
         // If modifying an existing recipe, create a variation
-        if let base = baseRecipe ?? context.currentRecipeContext {
+        if let base = baseRecipe ?? currentRecipeContext {
             return createModifiedRecipe(base: base, description: description)
         }
         
@@ -832,24 +844,35 @@ class GeminiService {
     /// Generate mock chat responses for demo mode
     /// Now context-aware to demonstrate features even in demo mode
     /// Includes [GENERATE_RECIPE: ...] markers when appropriate to trigger recipe card generation
-    private func generateMockChatResponse(for message: String, context: SessionContext, userProfile: UserProfile) -> String {
+    private func generateMockChatResponse(for message: String, context: SessionContext, userProfile: UserProfile) async -> String {
         let lowercased = message.lowercased()
-        let dataManager = DataManager.shared
+        let (selectedIngredientNames, currentRecipeContext, hasFridgeItems, fridgeItems, dailyMacros, goals, hasFavorites, favoriteRecipes) = await MainActor.run {
+            let dataManager = DataManager.shared
+            return (
+                context.selectedIngredientNames,
+                context.currentRecipeContext,
+                dataManager.hasFridgeItems,
+                dataManager.fridgeItems,
+                dataManager.dailyMacros,
+                dataManager.macroGoalsInGrams,
+                dataManager.hasFavorites,
+                dataManager.favoriteRecipes
+            )
+        }
         
         // Build context-aware response elements
         var ingredientInfo = ""
-        if !context.selectedIngredientNames.isEmpty {
-            let ingredients = context.selectedIngredientNames.prefix(3).joined(separator: ", ")
+        if !selectedIngredientNames.isEmpty {
+            let ingredients = selectedIngredientNames.prefix(3).joined(separator: ", ")
             ingredientInfo = " I see you have \(ingredients) available."
-        } else if dataManager.hasFridgeItems {
-            let items = dataManager.fridgeItems.prefix(3).map { $0.name }.joined(separator: ", ")
+        } else if hasFridgeItems {
+            let items = fridgeItems.prefix(3).map { $0.name }.joined(separator: ", ")
             ingredientInfo = " Based on your fridge items (\(items)), "
         }
         
         var macroInfo = ""
-        if dataManager.dailyMacros.caloriesConsumed > 0 {
-            let goals = dataManager.macroGoalsInGrams
-            let remaining = max(0, goals.calories - dataManager.dailyMacros.caloriesConsumed)
+        if dailyMacros.caloriesConsumed > 0 {
+            let remaining = max(0, goals.calories - dailyMacros.caloriesConsumed)
             macroInfo = " You have about \(remaining) calories remaining today."
         }
         
@@ -869,7 +892,7 @@ class GeminiService {
                                lowercased.contains("low-carb") || lowercased.contains("keto")
         
         // If modifying an existing recipe
-        if wantsModification && context.currentRecipeContext != nil {
+        if wantsModification && currentRecipeContext != nil {
             let modification = extractModificationType(from: lowercased)
             return "Here's an updated version with your changes: [GENERATE_RECIPE: \(modification) version of the current recipe]"
         }
@@ -933,8 +956,8 @@ class GeminiService {
             return "Great question! Common substitutions include: Greek yogurt for sour cream, olive oil for butter, and cauliflower rice for regular rice. What specific ingredient are you looking to substitute?"
             
         } else if lowercased.contains("favorite") {
-            if dataManager.hasFavorites {
-                let favorites = dataManager.favoriteRecipes.prefix(3).map { $0.title }.joined(separator: ", ")
+            if hasFavorites {
+                let favorites = favoriteRecipes.prefix(3).map { $0.title }.joined(separator: ", ")
                 return "Your favorite recipes include: \(favorites). Would you like me to suggest variations on any of these?"
             } else {
                 return "You haven't saved any favorites yet. After trying some recipes, tap the heart icon to save them for easy access later!"
@@ -999,4 +1022,3 @@ class GeminiService {
         return "meal"
     }
 }
-

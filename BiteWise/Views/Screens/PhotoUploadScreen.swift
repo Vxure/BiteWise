@@ -98,9 +98,9 @@ struct PhotoUploadScreen: View {
                     }
                     .frame(height: 0)
                     
-                    // Spacer for floating header
+                    // Spacer for floating header (reduced to start content closer to fade)
                     Color.clear
-                        .frame(height: headerHeight)
+                        .frame(height: headerHeight - 30)
                     
                     // Header content (scrollable)
                     VStack(spacing: 12) {
@@ -195,7 +195,7 @@ struct PhotoUploadScreen: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 12)
             }
             .frame(maxWidth: .infinity)
             .background(BWGradients.headerFadeGradient(for: colorScheme))

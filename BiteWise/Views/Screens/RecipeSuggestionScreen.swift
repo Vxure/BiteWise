@@ -72,9 +72,9 @@ struct RecipeSuggestionScreen: View {
                     }
                     .frame(height: 0)
                     
-                    // Spacer for floating header
+                    // Spacer for floating header (reduced to start content closer to fade)
                     Color.clear
-                        .frame(height: headerHeight)
+                        .frame(height: headerHeight - 20)
                     
                     if isLoading {
                         // Loading state
@@ -160,7 +160,7 @@ struct RecipeSuggestionScreen: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 20)
-            .padding(.bottom, 24)
+            .padding(.bottom, 12)
             .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)

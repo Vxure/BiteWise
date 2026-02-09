@@ -33,6 +33,7 @@ extension DetectedIngredient {
 
 /// Session context that holds state shared across screens during a user session
 /// This enables the chatbot to know about detected ingredients and generated recipes
+@MainActor
 class SessionContext: ObservableObject {
     
     // MARK: - Singleton
@@ -336,4 +337,3 @@ class SessionContext: ObservableObject {
         return detectedIngredients.map { $0.name }
     }
 }
-

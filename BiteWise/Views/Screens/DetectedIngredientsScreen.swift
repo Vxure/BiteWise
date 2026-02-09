@@ -91,9 +91,9 @@ struct DetectedIngredientsScreen: View {
                     }
                     .frame(height: 0)
                     
-                    // Spacer for floating header
+                    // Spacer for floating header (reduced to start content closer to fade)
                     Color.clear
-                        .frame(height: headerHeight)
+                        .frame(height: headerHeight - 30)
                     
                     // Ingredients list
                     VStack(spacing: 10) {
@@ -175,7 +175,7 @@ struct DetectedIngredientsScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20)
             .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.bottom, 12)
             .background(BWGradients.headerFadeGradient(for: colorScheme))
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)

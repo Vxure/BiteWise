@@ -22,6 +22,61 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Request limits / timeouts
+const MAX_BODY_BYTES = 16 * 1024; // 16 KB
+const REQUEST_TIMEOUT_MS = 10_000; // 10 seconds
+
+async function parseJsonBody(req: Request): Promise<{ ok: true; data: any } | { ok: false; response: Response }> {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_BODY_BYTES) {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  const bodyBuffer = await req.arrayBuffer();
+  if (bodyBuffer.byteLength > MAX_BODY_BYTES) {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  if (bodyBuffer.byteLength === 0) {
+    return { ok: true, data: {} };
+  }
+
+  try {
+    const text = new TextDecoder().decode(bodyBuffer);
+    return { ok: true, data: JSON.parse(text) };
+  } catch {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+}
+
+async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Structured logging
 function log(level: "info" | "warn" | "error", event: string, details?: Record<string, unknown>): void {
   console.log(JSON.stringify({ timestamp: new Date().toISOString(), level, event, ...details }));
@@ -103,13 +158,14 @@ serve(async (req) => {
   let useJobQueue = true; // Default to job queue for robustness
   let waitForCompletion = true; // Default to waiting for immediate processing
   
-  try {
-    const body = await req.json();
-    if (body.use_job_queue === false) useJobQueue = false;
-    if (body.wait_for_completion === false) waitForCompletion = false;
-  } catch {
-    // Empty body is fine, use defaults
+  const bodyResult = await parseJsonBody(req);
+  if (!bodyResult.ok) {
+    return bodyResult.response;
   }
+
+  const body = bodyResult.data ?? {};
+  if (body.use_job_queue === false) useJobQueue = false;
+  if (body.wait_for_completion === false) waitForCompletion = false;
 
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: authHeader } },
@@ -153,14 +209,14 @@ serve(async (req) => {
     if (waitForCompletion && jobData.status === "pending") {
       // Process the job immediately
       try {
-        const processResponse = await fetch(`${supabaseUrl}/functions/v1/process-account-deletion`, {
+        const processResponse = await fetchWithTimeout(`${supabaseUrl}/functions/v1/process-account-deletion`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${serviceRoleKey}`,
           },
           body: JSON.stringify({ job_id: jobData.job_id }),
-        });
+        }, REQUEST_TIMEOUT_MS);
 
         if (!processResponse.ok) {
           const errorText = await processResponse.text();

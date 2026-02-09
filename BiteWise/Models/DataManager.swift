@@ -3,11 +3,12 @@ import SwiftUI
 import os.log
 
 // MARK: - Data Manager for Local Persistence with Cloud Sync
+@MainActor
 class DataManager: ObservableObject {
     static let shared = DataManager()
     
     // MARK: - Privacy-Safe Logger
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BiteWise", category: "DataManager")
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "BiteWise", category: "DataManager")
     
     // MARK: - Published Data Properties
     @Published var userProfile: UserProfile
@@ -34,6 +35,9 @@ class DataManager: ObservableObject {
     @Published var isLoadingFromCloud: Bool = false
     
     private let userProfileKey = "userProfile"
+    private static let userProfileKeychainKey = "userProfile"
+    private static let dataVersionKey = "dataVersion"
+    private static let currentDataVersion = 1
     private let pantryItemsKey = "pantryItems"
     private let recipeHistoryKey = "recipeHistory"
     private let dailyMacrosKey = "dailyMacros"
@@ -54,6 +58,7 @@ class DataManager: ObservableObject {
     private let maxActivityLogSize = 50
     
     private init() {
+        DataManager.applyDataVersioning()
         // Load saved data or use defaults
         // Note: pantryItems defaults to empty array - users set up pantry during onboarding
         self.userProfile = DataManager.loadUserProfile() ?? UserProfile.dummy
@@ -82,11 +87,43 @@ class DataManager: ObservableObject {
         // Check and clear expired chat sessions on launch
         clearExpiredChatSessions()
     }
+
+    // MARK: - Data Versioning
+    private static func applyDataVersioning() {
+        let storedVersion = UserDefaults.standard.integer(forKey: dataVersionKey)
+        guard storedVersion != currentDataVersion else { return }
+        DataManager.logger.info("Data version mismatch (stored=\(storedVersion), current=\(currentDataVersion)). No destructive migration applied.")
+        UserDefaults.standard.set(currentDataVersion, forKey: dataVersionKey)
+    }
+
+    // MARK: - UserDefaults Helpers
+    private func saveCodable<T: Encodable>(_ value: T, forKey key: String) {
+        do {
+            let encoded = try JSONEncoder().encode(value)
+            UserDefaults.standard.set(encoded, forKey: key)
+        } catch {
+            DataManager.logger.error("Failed to encode \(key): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func loadCodable<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
+        guard let data = UserDefaults.standard.data(forKey: key) else {
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            DataManager.logger.error("Failed to decode \(key): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
     
     // MARK: - User Profile
     func saveUserProfile() {
-        if let encoded = try? JSONEncoder().encode(userProfile) {
-            UserDefaults.standard.set(encoded, forKey: userProfileKey)
+        do {
+            try KeychainService.shared.saveCodable(userProfile, for: DataManager.userProfileKeychainKey)
+        } catch {
+            DataManager.logger.error("Failed to save user profile to Keychain: \(error.localizedDescription, privacy: .public)")
         }
         // Sync to cloud in background
         syncUserProfileToCloud()
@@ -102,29 +139,38 @@ class DataManager: ObservableObject {
     }
     
     private static func loadUserProfile() -> UserProfile? {
-        guard let data = UserDefaults.standard.data(forKey: "userProfile"),
-              let profile = try? JSONDecoder().decode(UserProfile.self, from: data) else {
+        do {
+            if let profile = try KeychainService.shared.loadCodable(UserProfile.self, for: DataManager.userProfileKeychainKey) {
+                return profile
+            }
+        } catch {
+            DataManager.logger.error("Failed to load user profile from Keychain: \(error.localizedDescription, privacy: .public)")
+        }
+
+        guard let profile = loadCodable(UserProfile.self, forKey: "userProfile") else {
             return nil
         }
+
+        do {
+            try KeychainService.shared.saveCodable(profile, for: DataManager.userProfileKeychainKey)
+            UserDefaults.standard.removeObject(forKey: "userProfile")
+        } catch {
+            DataManager.logger.error("Failed to migrate user profile to Keychain: \(error.localizedDescription, privacy: .public)")
+        }
+
         return profile
     }
     
     // MARK: - Pantry Items
     func savePantryItems() {
-        if let encoded = try? JSONEncoder().encode(pantryItems) {
-            UserDefaults.standard.set(encoded, forKey: pantryItemsKey)
-        }
+        saveCodable(pantryItems, forKey: pantryItemsKey)
         // Update the last pantry update date
         lastPantryUpdateDate = Date()
         saveLastPantryUpdateDate()
     }
     
     private static func loadPantryItems() -> [Ingredient]? {
-        guard let data = UserDefaults.standard.data(forKey: "pantryItems"),
-              let items = try? JSONDecoder().decode([Ingredient].self, from: data) else {
-            return nil
-        }
-        return items
+        return loadCodable([Ingredient].self, forKey: "pantryItems")
     }
     
     func saveLastPantryUpdateDate() {
@@ -166,17 +212,11 @@ class DataManager: ObservableObject {
     
     // MARK: - Recipe History
     func saveRecipeHistory() {
-        if let encoded = try? JSONEncoder().encode(recipeHistory) {
-            UserDefaults.standard.set(encoded, forKey: recipeHistoryKey)
-        }
+        saveCodable(recipeHistory, forKey: recipeHistoryKey)
     }
     
     private static func loadRecipeHistory() -> [Recipe]? {
-        guard let data = UserDefaults.standard.data(forKey: "recipeHistory"),
-              let history = try? JSONDecoder().decode([Recipe].self, from: data) else {
-            return nil
-        }
-        return history
+        return loadCodable([Recipe].self, forKey: "recipeHistory")
     }
     
     func addRecipeToHistory(_ recipe: Recipe) {
@@ -191,19 +231,13 @@ class DataManager: ObservableObject {
     
     // MARK: - Daily Macros
     func saveDailyMacros() {
-        if let encoded = try? JSONEncoder().encode(dailyMacros) {
-            UserDefaults.standard.set(encoded, forKey: dailyMacrosKey)
-        }
+        saveCodable(dailyMacros, forKey: dailyMacrosKey)
         // Sync to cloud in background
         syncDailyMacrosToCloud()
     }
     
     private static func loadDailyMacros() -> DailyMacroLog? {
-        guard let data = UserDefaults.standard.data(forKey: "dailyMacros"),
-              let macros = try? JSONDecoder().decode(DailyMacroLog.self, from: data) else {
-            return nil
-        }
-        return macros
+        return loadCodable(DailyMacroLog.self, forKey: "dailyMacros")
     }
     
     func updateDailyMacros(calories: Int, protein: Double, carbs: Double, fats: Double) {
@@ -248,17 +282,11 @@ class DataManager: ObservableObject {
     // MARK: - Macro History
     
     func saveMacroHistory() {
-        if let encoded = try? JSONEncoder().encode(macroHistory) {
-            UserDefaults.standard.set(encoded, forKey: macroHistoryKey)
-        }
+        saveCodable(macroHistory, forKey: macroHistoryKey)
     }
     
     private static func loadMacroHistory() -> [DailyMacroLog] {
-        guard let data = UserDefaults.standard.data(forKey: "macroHistory"),
-              let history = try? JSONDecoder().decode([DailyMacroLog].self, from: data) else {
-            return []
-        }
-        return history
+        return loadCodable([DailyMacroLog].self, forKey: "macroHistory") ?? []
     }
     
     /// Get macro logs for the last N days (including today)
@@ -523,17 +551,11 @@ class DataManager: ObservableObject {
     // MARK: - Fridge Items
     
     func saveFridgeItems() {
-        if let encoded = try? JSONEncoder().encode(fridgeItems) {
-            UserDefaults.standard.set(encoded, forKey: fridgeItemsKey)
-        }
+        saveCodable(fridgeItems, forKey: fridgeItemsKey)
     }
     
     private static func loadFridgeItems() -> [FridgeItem] {
-        guard let data = UserDefaults.standard.data(forKey: "fridgeItems"),
-              let items = try? JSONDecoder().decode([FridgeItem].self, from: data) else {
-            return []
-        }
-        return items
+        return loadCodable([FridgeItem].self, forKey: "fridgeItems") ?? []
     }
     
     func saveLastFridgeScanDate() {
@@ -782,17 +804,11 @@ class DataManager: ObservableObject {
     // MARK: - Activity Log
     
     func saveActivityLog() {
-        if let encoded = try? JSONEncoder().encode(activityLog) {
-            UserDefaults.standard.set(encoded, forKey: activityLogKey)
-        }
+        saveCodable(activityLog, forKey: activityLogKey)
     }
     
     private static func loadActivityLog() -> [ActivityItem] {
-        guard let data = UserDefaults.standard.data(forKey: "activityLog"),
-              let activities = try? JSONDecoder().decode([ActivityItem].self, from: data) else {
-            return []
-        }
-        return activities
+        return loadCodable([ActivityItem].self, forKey: "activityLog") ?? []
     }
     
     /// Log a new activity to the activity log
@@ -830,17 +846,11 @@ class DataManager: ObservableObject {
     // MARK: - Favorites
     
     func saveFavoriteRecipes() {
-        if let encoded = try? JSONEncoder().encode(favoriteRecipes) {
-            UserDefaults.standard.set(encoded, forKey: favoriteRecipesKey)
-        }
+        saveCodable(favoriteRecipes, forKey: favoriteRecipesKey)
     }
     
     private static func loadFavoriteRecipes() -> [Recipe] {
-        guard let data = UserDefaults.standard.data(forKey: "favoriteRecipes"),
-              let recipes = try? JSONDecoder().decode([Recipe].self, from: data) else {
-            return []
-        }
-        return recipes
+        return loadCodable([Recipe].self, forKey: "favoriteRecipes") ?? []
     }
     
     /// Check if a recipe is favorited
@@ -899,30 +909,21 @@ class DataManager: ObservableObject {
     // MARK: - Chat History
     
     func saveGeneralChatHistory() {
-        if let encoded = try? JSONEncoder().encode(generalChatHistory) {
-            UserDefaults.standard.set(encoded, forKey: generalChatHistoryKey)
-        }
+        saveCodable(generalChatHistory, forKey: generalChatHistoryKey)
     }
     
     private static func loadGeneralChatHistory() -> [ChatMessage] {
-        guard let data = UserDefaults.standard.data(forKey: "generalChatHistory"),
-              let messages = try? JSONDecoder().decode([ChatMessage].self, from: data) else {
-            return []
-        }
-        return messages
+        return loadCodable([ChatMessage].self, forKey: "generalChatHistory") ?? []
     }
     
     func saveRecipeChatHistories() {
         // Convert UUID keys to strings for JSON encoding
         let stringKeyed = Dictionary(uniqueKeysWithValues: recipeChatHistories.map { ($0.key.uuidString, $0.value) })
-        if let encoded = try? JSONEncoder().encode(stringKeyed) {
-            UserDefaults.standard.set(encoded, forKey: recipeChatHistoriesKey)
-        }
+        saveCodable(stringKeyed, forKey: recipeChatHistoriesKey)
     }
     
     private static func loadRecipeChatHistories() -> [UUID: [ChatMessage]] {
-        guard let data = UserDefaults.standard.data(forKey: "recipeChatHistories"),
-              let stringKeyed = try? JSONDecoder().decode([String: [ChatMessage]].self, from: data) else {
+        guard let stringKeyed = loadCodable([String: [ChatMessage]].self, forKey: "recipeChatHistories") else {
             return [:]
         }
         // Convert string keys back to UUIDs
@@ -1017,17 +1018,11 @@ class DataManager: ObservableObject {
     // MARK: - Chat Sessions (Multi-conversation support)
     
     func saveChatSessions() {
-        if let encoded = try? JSONEncoder().encode(chatSessions) {
-            UserDefaults.standard.set(encoded, forKey: chatSessionsKey)
-        }
+        saveCodable(chatSessions, forKey: chatSessionsKey)
     }
     
     private static func loadChatSessions() -> [ChatSession] {
-        guard let data = UserDefaults.standard.data(forKey: "chatSessions"),
-              let sessions = try? JSONDecoder().decode([ChatSession].self, from: data) else {
-            return []
-        }
-        return sessions
+        return loadCodable([ChatSession].self, forKey: "chatSessions") ?? []
     }
     
     /// Create a new chat session
@@ -1144,17 +1139,11 @@ class DataManager: ObservableObject {
     // MARK: - Recipe Feedback
     
     func saveRecipeFeedbackData() {
-        if let encoded = try? JSONEncoder().encode(recipeFeedback) {
-            UserDefaults.standard.set(encoded, forKey: recipeFeedbackKey)
-        }
+        saveCodable(recipeFeedback, forKey: recipeFeedbackKey)
     }
     
     private static func loadRecipeFeedback() -> [RecipeFeedback] {
-        guard let data = UserDefaults.standard.data(forKey: "recipeFeedback"),
-              let feedback = try? JSONDecoder().decode([RecipeFeedback].self, from: data) else {
-            return []
-        }
-        return feedback
+        return loadCodable([RecipeFeedback].self, forKey: "recipeFeedback") ?? []
     }
     
     /// Add or update feedback for a recipe
@@ -1204,7 +1193,7 @@ class DataManager: ObservableObject {
             do {
                 _ = try await SupabaseDataService.shared.addFridgeItem(item)
             } catch {
-                self.logger.error("Failed to sync fridge item to cloud: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync fridge item to cloud: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1216,7 +1205,7 @@ class DataManager: ObservableObject {
             do {
                 try await SupabaseDataService.shared.deleteFridgeItem(itemId)
             } catch {
-                self.logger.error("Failed to sync fridge item deletion: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync fridge item deletion: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1228,7 +1217,7 @@ class DataManager: ObservableObject {
             do {
                 _ = try await SupabaseDataService.shared.addPantryItem(item)
             } catch {
-                self.logger.error("Failed to sync pantry item to cloud: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync pantry item to cloud: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1240,7 +1229,7 @@ class DataManager: ObservableObject {
             do {
                 try await SupabaseDataService.shared.deletePantryItem(itemId)
             } catch {
-                self.logger.error("Failed to sync pantry item deletion: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync pantry item deletion: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1264,7 +1253,7 @@ class DataManager: ObservableObject {
                 )
                 try await SupabaseDataService.shared.updateUserPreferences(preferencesUpdate)
             } catch {
-                self.logger.error("Failed to sync user profile: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync user profile: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1280,7 +1269,7 @@ class DataManager: ObservableObject {
                     try await SupabaseDataService.shared.removeRecipeFromFavorites(recipe.id)
                 }
             } catch {
-                self.logger.error("Failed to sync favorite: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync favorite: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1292,7 +1281,7 @@ class DataManager: ObservableObject {
             do {
                 try await SupabaseDataService.shared.logActivity(activity)
             } catch {
-                self.logger.error("Failed to sync activity: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync activity: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1304,7 +1293,7 @@ class DataManager: ObservableObject {
             do {
                 try await SupabaseDataService.shared.updateDailyMacros(self.dailyMacros)
             } catch {
-                self.logger.error("Failed to sync daily macros: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync daily macros: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1316,7 +1305,7 @@ class DataManager: ObservableObject {
             do {
                 try await SupabaseDataService.shared.saveRecipeFeedback(feedback)
             } catch {
-                self.logger.error("Failed to sync recipe feedback: \(error.localizedDescription, privacy: .public)")
+                DataManager.logger.error("Failed to sync recipe feedback: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1371,7 +1360,7 @@ class DataManager: ObservableObject {
         // Safety check: only sync if authenticated and not in guest mode
         // If this fails, something is wrong - don't clear the flag so we can retry
         guard checkShouldSyncToCloud() else {
-            logger.warning("Migration called but sync conditions not met (isGuestMode=\(GuestModeService.shared.isGuestMode), isAuthenticated=\(AuthService.shared.isAuthenticated))")
+            DataManager.logger.warning("Migration called but sync conditions not met (isGuestMode=\(GuestModeService.shared.isGuestMode), isAuthenticated=\(AuthService.shared.isAuthenticated))")
             return false
         }
         
@@ -1379,25 +1368,25 @@ class DataManager: ObservableObject {
         // Return false so the caller does NOT clear wasInGuestMode flag
         // The other caller (the one actually syncing) will clear the flag if it succeeds
         guard !isSyncing else {
-            logger.info("Migration already in progress, skipping duplicate call")
+            DataManager.logger.info("Migration already in progress, skipping duplicate call")
             return false
         }
         
         // Get current user ID
         guard let userId = AuthService.shared.currentUser?.id.uuidString else {
-            logger.warning("Cannot migrate: No authenticated user")
+            DataManager.logger.warning("Cannot migrate: No authenticated user")
             return false
         }
         
         // Skip if already migrated for this user
         guard !hasAlreadyMigratedGuestData(for: userId) else {
-            logger.info("Guest data already migrated for user")
+            DataManager.logger.info("Guest data already migrated for user")
             return true
         }
         
         // Skip if no meaningful local data
         guard hasLocalDataToMigrate else {
-            logger.info("No local data to migrate")
+            DataManager.logger.info("No local data to migrate")
             markGuestDataAsMigrated(for: userId)
             return true
         }
@@ -1420,12 +1409,12 @@ class DataManager: ObservableObject {
             // Mark as migrated so we don't duplicate on next login
             markGuestDataAsMigrated(for: userId)
             
-            logger.info("Successfully migrated guest data")
+            DataManager.logger.info("Successfully migrated guest data")
             isSyncing = false
             return true
             
         } catch {
-            logger.error("Failed to migrate guest data: \(error.localizedDescription, privacy: .public)")
+            DataManager.logger.error("Failed to migrate guest data: \(error.localizedDescription, privacy: .public)")
             syncError = "Failed to migrate your data: \(error.localizedDescription)"
             isSyncing = false
             return false
@@ -1505,7 +1494,7 @@ class DataManager: ObservableObject {
             isLoadingFromCloud = false
             
         } catch {
-            logger.error("Failed to load from cloud: \(error.localizedDescription, privacy: .public)")
+            DataManager.logger.error("Failed to load from cloud: \(error.localizedDescription, privacy: .public)")
             syncError = error.localizedDescription
             isLoadingFromCloud = false
         }
@@ -1537,7 +1526,7 @@ class DataManager: ObservableObject {
             isSyncing = false
             
         } catch {
-            logger.error("Failed to sync all to cloud: \(error.localizedDescription, privacy: .public)")
+            DataManager.logger.error("Failed to sync all to cloud: \(error.localizedDescription, privacy: .public)")
             syncError = error.localizedDescription
             isSyncing = false
         }
@@ -1572,6 +1561,12 @@ class DataManager: ObservableObject {
         
         for key in keysToClear {
             defaults.removeObject(forKey: key)
+        }
+
+        do {
+            try KeychainService.shared.delete(DataManager.userProfileKeychainKey)
+        } catch {
+            DataManager.logger.error("Failed to delete user profile from Keychain: \(error.localizedDescription, privacy: .public)")
         }
         
         // Reset all in-memory data to defaults

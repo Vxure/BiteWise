@@ -22,6 +22,50 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Request limits / timeouts
+const MAX_BODY_BYTES = 16 * 1024; // 16 KB
+
+async function parseJsonBody(req: Request): Promise<{ ok: true; data: any } | { ok: false; response: Response }> {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_BODY_BYTES) {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  const bodyBuffer = await req.arrayBuffer();
+  if (bodyBuffer.byteLength > MAX_BODY_BYTES) {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+
+  if (bodyBuffer.byteLength === 0) {
+    return { ok: true, data: {} };
+  }
+
+  try {
+    const text = new TextDecoder().decode(bodyBuffer);
+    return { ok: true, data: JSON.parse(text) };
+  } catch {
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
+  }
+}
+
 // Structured logging helper
 interface LogEvent {
   event: string;
@@ -267,7 +311,7 @@ async function processJob(
   }
 }
 
-serve(async (req) => {
+export async function handler(req: Request): Promise<Response> {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -282,6 +326,15 @@ serve(async (req) => {
     );
   }
 
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${serviceRoleKey}`) {
+    log("warn", { event: "unauthorized_request" });
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   // Create admin client
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -293,13 +346,13 @@ serve(async (req) => {
     let processAll = false;
 
     if (req.method === "POST") {
-      try {
-        const body = await req.json();
-        jobId = body.job_id || null;
-        processAll = body.process_all === true;
-      } catch {
-        // Empty body is fine
+      const bodyResult = await parseJsonBody(req);
+      if (!bodyResult.ok) {
+        return bodyResult.response;
       }
+      const body = bodyResult.data ?? {};
+      jobId = body.job_id || null;
+      processAll = body.process_all === true;
     }
 
     let jobs: DeletionJob[] = [];
@@ -381,4 +434,8 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+}
+
+if (import.meta.main) {
+  serve(handler);
+}

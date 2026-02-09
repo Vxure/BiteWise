@@ -69,9 +69,9 @@ struct PantryItemsScreen: View {
                     }
                     .frame(height: 0)
                     
-                    // Spacer for floating header
+                    // Spacer for floating header (reduced to start content closer to fade)
                     Color.clear
-                        .frame(height: headerHeight)
+                        .frame(height: headerHeight - 30)
                     
                     if dataManager.pantryItems.isEmpty {
                         // Empty state
@@ -157,7 +157,7 @@ struct PantryItemsScreen: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
-                .padding(.bottom, 16)
+                .padding(.bottom, 12)
             }
             .frame(maxWidth: .infinity)
             .background(BWGradients.headerFadeGradient(for: colorScheme))
