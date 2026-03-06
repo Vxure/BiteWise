@@ -346,9 +346,20 @@ struct PantrySetupScreen: View {
     }
     
     /// Save pantry items to DataManager and continue
+    private static let commonItemCategories: [String: String] = [
+        "Salt": "condiment", "Black Pepper": "condiment", "Olive Oil": "condiment",
+        "Garlic": "vegetable", "Onions": "vegetable", "Rice": "grain",
+        "Pasta": "grain", "Flour": "grain", "Sugar": "condiment", "Baking Powder": "condiment"
+    ]
+    
     private func saveAndContinue() {
-        // Convert selected items to Ingredient objects - pantry items are staples by default
-        let ingredients = selectedItems.map { Ingredient(name: $0, isStaple: true) }
+        let ingredients = selectedItems.map { name in
+            Ingredient(
+                name: name,
+                category: Self.commonItemCategories[name] ?? "other",
+                isStaple: true
+            )
+        }
         dataManager.pantryItems = ingredients
         dataManager.savePantryItems()
         onContinue()

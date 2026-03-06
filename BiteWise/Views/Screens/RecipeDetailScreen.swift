@@ -8,6 +8,26 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
     }
 }
 
+// MARK: - Bookmark Position Preference Key
+private struct BookmarkPositionKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Tooltip Arrow
+private struct TooltipArrow: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct RecipeDetailScreen: View {
     let recipe: Recipe
     var onFeedback: () -> Void
@@ -19,6 +39,18 @@ struct RecipeDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
     
+    // FTUE tutorial overlay state
+    @AppStorage("hasSeenSaveTip") private var hasSeenSaveTip: Bool = false
+    @State private var showTutorialOverlay: Bool = false
+    @State private var overlayOpacity: Double = 0
+    @State private var tooltipVisible: Bool = false
+    @State private var bookmarkPulse: Bool = false
+    @State private var bookmarkButtonFrame: CGRect = .zero
+    
+    // Pill-shaped confirmation toast state (original design)
+    @State private var showSaveConfirmation: Bool = false
+    @State private var checkmarkAnimated: Bool = false
+
     // Scroll tracking state for fading header
     @State private var scrollOffset: CGFloat = 0
     @State private var lastScrollOffset: CGFloat = 0
@@ -104,18 +136,13 @@ struct RecipeDetailScreen: View {
                         }
                         
                         // Save bookmark button
-                        Button(action: {
-                            BWHaptics.mediumImpact()
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                dataManager.toggleFavorite(recipe)
-                            }
-                        }) {
+                        Button(action: { handleSaveTap() }) {
                             ZStack {
                                 Circle()
                                     .fill(Color(.secondarySystemBackground))
                                     .frame(width: 44, height: 44)
                                     .adaptiveShadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-                                
+
                                 Image(systemName: isFavorite ? "bookmark.fill" : "bookmark")
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
@@ -124,6 +151,18 @@ struct RecipeDetailScreen: View {
                         }
                         .buttonStyle(.bwPressable)
                         .padding(12)
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear
+                                    .preference(
+                                        key: BookmarkPositionKey.self,
+                                        value: geo.frame(in: .global)
+                                    )
+                            }
+                        )
+                        .onPreferenceChange(BookmarkPositionKey.self) { frame in
+                            bookmarkButtonFrame = frame
+                        }
                     }
                     
                     // Recipe title and description
@@ -377,6 +416,104 @@ struct RecipeDetailScreen: View {
             .offset(y: headerTranslateY)
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
+
+            // MARK: - FTUE Tutorial Overlay
+            if showTutorialOverlay {
+                ZStack {
+                    Color.black
+                        .opacity(overlayOpacity * 0.55)
+                        .ignoresSafeArea()
+                        .onTapGesture { dismissTutorial() }
+
+                    Button(action: { handleSaveTap() }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(.secondarySystemBackground))
+                                .frame(width: 44, height: 44)
+                                .shadow(color: Color.white.opacity(0.25), radius: 16, x: 0, y: 0)
+                                .shadow(color: Color.bwAdaptiveAccent(for: colorScheme).opacity(0.3), radius: 20, x: 0, y: 4)
+
+                            Image(systemName: isFavorite ? "bookmark.fill" : "bookmark")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
+                        }
+                        .scaleEffect(bookmarkPulse ? 1.08 : 1.0)
+                    }
+                    .buttonStyle(.plain)
+                    .position(
+                        x: bookmarkButtonFrame.midX,
+                        y: bookmarkButtonFrame.midY - 60
+                    )
+
+                    if tooltipVisible {
+                        VStack(spacing: 0) {
+                            HStack {
+                                Spacer()
+                                TooltipArrow()
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                                    .frame(width: 16, height: 8)
+                                    .padding(.trailing, 28)
+                            }
+                            .frame(maxWidth: 280)
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "bookmark.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(Color.bwAdaptiveAccent(for: colorScheme))
+
+                                Text("Sound yummy? Save this for later!")
+                                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            )
+                            .shadow(color: Color.black.opacity(0.15), radius: 20, x: 0, y: 8)
+                        }
+                        .position(
+                            x: bookmarkButtonFrame.midX - 105,
+                            y: bookmarkButtonFrame.maxY - 35
+                        )
+                        .transition(.opacity.combined(with: .offset(y: -8)).combined(with: .scale(scale: 0.95)))
+                    }
+                }
+                .zIndex(10)
+                .animation(.easeOut(duration: 0.35), value: overlayOpacity)
+                .animation(.bwBouncy, value: tooltipVisible)
+                .allowsHitTesting(true)
+            }
+
+            // MARK: - Save Confirmation Toast (pill above nav bar)
+            if showSaveConfirmation {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.green)
+                        .scaleEffect(checkmarkAnimated ? 1.0 : 0.0)
+                        .opacity(checkmarkAnimated ? 1.0 : 0.0)
+                        .animation(.bwBouncy, value: checkmarkAnimated)
+                    Text("Saved. We'll remember this for later.")
+                        .font(BWTypography.caption)
+                        .foregroundColor(.primary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.regularMaterial, in: Capsule())
+                .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 6)
+                .padding(.bottom, 110)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.8).combined(with: .opacity),
+                    removal: .scale(scale: 0.95).combined(with: .opacity)
+                ))
+                .zIndex(2)
+                .allowsHitTesting(false)
+            }
         }
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(isPresented: $showingAIAssistant) {
@@ -395,8 +532,74 @@ struct RecipeDetailScreen: View {
             }
         }
         .onAppear {
-            // Load saved rating
+            hasSeenSaveTip = false
             userRating = dataManager.getRating(for: recipe)
+            if !hasSeenSaveTip && !isFavorite {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                    presentTutorial()
+                }
+            }
+        }
+        .onChange(of: showSaveConfirmation) { _, newValue in
+            if newValue {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+                    withAnimation(.bwSnappy) { showSaveConfirmation = false }
+                }
+            }
+        }
+    }
+    
+    // MARK: - FTUE Tutorial Lifecycle
+    
+    private func presentTutorial() {
+        showTutorialOverlay = true
+        withAnimation(.easeOut(duration: 0.4)) {
+            overlayOpacity = 1.0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                tooltipVisible = true
+            }
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                bookmarkPulse = true
+            }
+        }
+    }
+    
+    private func dismissTutorial() {
+        withAnimation(.easeOut(duration: 0.25)) {
+            tooltipVisible = false
+            bookmarkPulse = false
+        }
+        withAnimation(.easeOut(duration: 0.3)) {
+            overlayOpacity = 0
+        }
+        hasSeenSaveTip = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            showTutorialOverlay = false
+        }
+    }
+    
+    private func handleSaveTap() {
+        BWHaptics.mediumImpact()
+        let wasFavorite = isFavorite
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            dataManager.toggleFavorite(recipe)
+        }
+        
+        if showTutorialOverlay {
+            dismissTutorial()
+        }
+        
+        if !wasFavorite {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                checkmarkAnimated = false
+                BWHaptics.success()
+                withAnimation(.bwBouncy) { showSaveConfirmation = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    withAnimation(.bwBouncy) { checkmarkAnimated = true }
+                }
+            }
         }
     }
     

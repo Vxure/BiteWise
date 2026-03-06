@@ -10,12 +10,12 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 
 struct DashboardView: View {
     @EnvironmentObject private var navigationState: AppNavigationState
+    @EnvironmentObject private var tabSelection: TabSelectionState
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var authService = AuthService.shared
     @ObservedObject private var guestModeService = GuestModeService.shared
     @Environment(\.colorScheme) var colorScheme
     @State private var isVisible = false
-    @AppStorage("hasSeenWelcomeHint") private var hasSeenWelcomeHint: Bool = false
     @State private var hasLoadedFromCloud = false
     
     // Scroll tracking state for fading header
@@ -59,7 +59,20 @@ struct DashboardView: View {
         default: return "Dinner"
         }
     }
-    
+
+    // MARK: - Hero Section Data
+
+    private var totalItems: Int {
+        dataManager.fridgeItems.count + dataManager.pantryItems.count
+    }
+
+    private var heroRecipes: [Recipe] {
+        if !dataManager.recipeHistory.isEmpty {
+            return Array(dataManager.recipeHistory.prefix(8))
+        }
+        return Recipe.dummyData
+    }
+
     // MARK: - Header Animation Calculations
     
     private var scrollProgress: CGFloat {
@@ -113,23 +126,14 @@ struct DashboardView: View {
                     greetingHeaderSection
                         .staggeredAppear(index: 0)
                     
-                    // MARK: - First-time User Guidance
-                    if !hasSeenWelcomeHint && !dataManager.hasFridgeItems {
-                        welcomeGuidanceSection
-                            .staggeredAppear(index: 1)
-                    }
+                    // MARK: - Hero Section (conditional)
+                    heroSection
+                        .staggeredAppear(index: 1)
+                        .animation(.bwSpring, value: totalItems == 0)
                     
-                    // MARK: - Quick Actions (NEW - primary focus)
-                    quickActionsSection
-                        .staggeredAppear(index: hasSeenWelcomeHint || dataManager.hasFridgeItems ? 1 : 2)
-                    
-                    // MARK: - Pantry Overview (NEW)
-                    pantryOverviewSection
+                    // MARK: - My Kitchen (Pantry + Fridge)
+                    inventorySection
                         .staggeredAppear(index: 3)
-                    
-                    // MARK: - Fridge Overview (NEW)
-                    fridgeOverviewSection
-                        .staggeredAppear(index: 4)
                     
                     // MARK: - Running Low (moved up - actionable)
                     runningLowSection
@@ -317,11 +321,22 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .bwCardStyle(padding: 14, cornerRadius: 16)
     }
-    
-    // MARK: - Welcome Guidance (First-time users)
-    private var welcomeGuidanceSection: some View {
+
+    // MARK: - Hero Section (conditional router)
+
+    @ViewBuilder
+    private var heroSection: some View {
+        if totalItems == 0 {
+            heroEmptyStateCard
+        } else {
+            heroRecipeCarousel
+        }
+    }
+
+    // MARK: - Hero Empty State (State A: totalItems == 0)
+
+    private var heroEmptyStateCard: some View {
         VStack(spacing: 16) {
-            // Icon
             ZStack {
                 Circle()
                     .fill(
@@ -332,28 +347,26 @@ struct DashboardView: View {
                         )
                     )
                     .frame(width: 70, height: 70)
-                
+
                 Image(systemName: "camera.viewfinder")
                     .font(.system(size: 32, weight: .medium))
-                    .foregroundColor(Color.bwPrimary)
+                    .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme))
             }
-            
+
             VStack(spacing: 8) {
                 Text("Welcome to BiteWise!")
                     .font(BWTypography.cardTitle)
                     .foregroundColor(.primary)
-                
+
                 Text("Start by scanning your fridge to discover personalized recipe ideas based on what you have.")
                     .font(BWTypography.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
-            
-            // Scan button
+
             Button(action: {
                 BWHaptics.mediumImpact()
-                hasSeenWelcomeHint = true
-                navigationState.navigateTo(.photoUpload)
+                tabSelection.switchToTab(1)
             }) {
                 HStack(spacing: 8) {
                     Image(systemName: "camera.fill")
@@ -375,17 +388,6 @@ struct DashboardView: View {
                 .shadow(color: Color.bwPrimary.opacity(0.3), radius: 6, x: 0, y: 3)
             }
             .buttonStyle(.bwPressable)
-            
-            // Dismiss link
-            Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    hasSeenWelcomeHint = true
-                }
-            }) {
-                Text("I'll explore first")
-                    .font(BWTypography.captionSmall)
-                    .foregroundColor(.secondary)
-            }
         }
         .padding(20)
         .frame(maxWidth: .infinity)
@@ -399,99 +401,104 @@ struct DashboardView: View {
                 .stroke(colorScheme == .dark ? Color.white.opacity(0.05) : Color.bwPrimary.opacity(0.1), lineWidth: 1)
         )
     }
-    
-    // MARK: - Quick Actions
-    private var quickActionsSection: some View {
+
+    // MARK: - Hero Recipe Carousel (State B: totalItems > 0)
+
+    private var heroRecipeCarousel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("What would you like to do?")
-                .font(BWTypography.cardTitle)
-            
-            HStack(spacing: 12) {
-                // Scan Ingredients
-                Button(action: {
-                    BWHaptics.mediumImpact()
-                    navigationState.navigateTo(.photoUpload)
-                }) {
-                    quickActionButton(
-                        icon: "camera.fill",
-                        title: "Scan",
-                        subtitle: "Ingredients",
-                        color: Color.bwPrimary
-                    )
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Based on your ingredients")
+                        .font(BWTypography.cardTitle)
+
+                    Text("Recipes using the \(totalItems) items in your kitchen")
+                        .font(BWTypography.caption)
+                        .foregroundColor(.secondary)
                 }
-                .buttonStyle(.bwPressable)
-                
-                // Ask AI
+                Spacer()
                 Button(action: {
-                    BWHaptics.mediumImpact()
-                    navigationState.navigateTo(.recipeAIAssistant)
+                    BWHaptics.lightImpact()
+                    SessionContext.shared.generatedRecipes = Array(dataManager.recipeHistory)
+                    navigationState.navigateTo(.recipeSuggestion)
                 }) {
-                    quickActionButton(
-                        icon: "sparkles",
-                        title: "Ask AI",
-                        subtitle: "Get recipes",
-                        color: Color.bwAccent
-                    )
+                    Text("View All")
+                        .font(BWTypography.buttonSmall)
+                        .foregroundColor(Color.bwPrimary)
                 }
-                .buttonStyle(.bwPressable)
-                
-                // Saved Recipes
-                Button(action: {
-                    BWHaptics.mediumImpact()
-                    navigationState.navigateTo(.favorites)
-                }) {
-                    quickActionButton(
-                        icon: "bookmark.fill",
-                        title: "Saved",
-                        subtitle: "\(dataManager.favoriteRecipes.count) saved",
-                        color: Color.bwProtein
-                    )
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(Array(heroRecipes.enumerated()), id: \.element.id) { index, recipe in
+                        Button(action: {
+                            BWHaptics.lightImpact()
+                            navigationState.navigateTo(.recipeDetail(recipe))
+                        }) {
+                            heroRecipeCard(recipe: recipe, index: index)
+                        }
+                        .buttonStyle(.bwPressable)
+                    }
                 }
-                .buttonStyle(.bwPressable)
+                .padding(.bottom, 4)
+                .padding(.horizontal, 2)
             }
         }
-        .bwCardStyle(padding: 14, cornerRadius: 16)
     }
-    
-    private func quickActionButton(icon: String, title: String, subtitle: String, color: Color) -> some View {
-        VStack(spacing: 8) {
+
+    // MARK: - Hero Recipe Card
+
+    private func heroRecipeCard(recipe: Recipe, index: Int) -> some View {
+        let cardColor = colorForRecipe(at: index)
+        let cardIcon = iconForRecipe(at: index)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            // Gradient placeholder image
             ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [color, color.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 16,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 16
+                )
+                .fill(
+                    LinearGradient(
+                        colors: [cardColor.opacity(0.25), cardColor.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-                    .frame(width: 44, height: 44)
-                    .adaptiveShadow(color: color.opacity(0.3), radius: 6, x: 0, y: 3)
-                
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
+                )
+                .frame(height: 110)
+
+                Image(systemName: cardIcon)
+                    .font(.system(size: 30, weight: .medium))
+                    .foregroundColor(cardColor)
             }
-            
-            VStack(spacing: 2) {
-                Text(title)
-                    .font(BWTypography.bodyPrimary)
-                    .fontWeight(.semibold)
+
+            // Card info
+            VStack(alignment: .leading, spacing: 8) {
+                Text(recipe.title)
+                    .font(BWTypography.cardTitle)
                     .foregroundColor(.primary)
-                
-                Text(subtitle)
-                    .font(BWTypography.captionSmall)
-                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 6) {
+                    CompactMacroBadge(value: recipe.macros.carbs, type: .carbs)
+                    CompactMacroBadge(value: recipe.macros.protein, type: .protein)
+                    CompactMacroBadge(value: recipe.macros.fats, type: .fats)
+                }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
+        .frame(width: 200)
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.tertiarySystemBackground))
         )
-        .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+        .adaptiveShadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
-    
+
     // MARK: - Saved Recipes Preview
     private var favoritesPreviewSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -609,208 +616,109 @@ struct DashboardView: View {
         .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
     }
     
-    // MARK: - Pantry Overview
-    private var pantryOverviewSection: some View {
+    // MARK: - My Kitchen (Combined Pantry + Fridge)
+    private var inventorySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("My Pantry")
-                    .font(BWTypography.cardTitle)
-                
-                Spacer()
-                
-                if !dataManager.pantryItems.isEmpty {
-                    Button(action: {
-                        BWHaptics.lightImpact()
-                        navigationState.navigateTo(.pantryItems)
-                    }) {
-                        Text("View All")
-                            .font(BWTypography.buttonSmall)
-                            .foregroundColor(Color.bwPantryBrown)
-                    }
-                }
-            }
-            
-            Button(action: {
-                BWHaptics.lightImpact()
-                navigationState.navigateTo(.pantryItems)
-            }) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.bwPantryBrown.opacity(0.2), Color.bwPantryBrown.opacity(0.08)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 50, height: 50)
-                        
-                        Image(systemName: "archivebox.fill")
-                            .font(.system(size: 22, weight: .medium))
-                            .foregroundColor(Color.bwPantryBrown)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("\(dataManager.pantryItems.count) items")
-                            .font(BWTypography.bodyPrimary)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        if let timeAgo = dataManager.lastPantryUpdateTimeAgo {
-                            HStack(spacing: 4) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 10))
-                                Text("Updated \(timeAgo)")
-                                    .font(BWTypography.captionSmall)
-                            }
-                            .foregroundColor(Color.bwPantryBrown.opacity(0.8))
-                        } else {
-                            Text("Tap to manage")
-                                .font(BWTypography.captionSmall)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        BWHaptics.lightImpact()
-                        navigationState.navigateTo(.photoUpload)
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 12, weight: .semibold))
-                            Text("Scan")
-                                .font(BWTypography.buttonSmall)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(
-                            Capsule()
-                                .fill(Color.bwPantryBrown)
-                        )
-                        .shadow(color: Color.bwPantryBrown.opacity(0.3), radius: 4, x: 0, y: 2)
-                    }
-                    .buttonStyle(.bwPressable)
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color(.tertiarySystemBackground))
+            Text("My Kitchen")
+                .font(BWTypography.cardTitle)
+
+            HStack(spacing: 12) {
+                // Pantry sub-card
+                inventorySubCard(
+                    title: "Pantry",
+                    icon: "archivebox.fill",
+                    color: Color.bwPantryBrown,
+                    itemCount: dataManager.pantryItems.count,
+                    lastUpdate: dataManager.lastPantryUpdateTimeAgo,
+                    onTap: { navigationState.navigateTo(.pantryItems) },
+                    onScan: { tabSelection.switchToTab(1) }
                 )
-                .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+
+                // Fridge sub-card
+                inventorySubCard(
+                    title: "Fridge",
+                    icon: "snowflake",
+                    color: Color.bwFridgeBlue,
+                    itemCount: dataManager.fridgeItems.count,
+                    lastUpdate: dataManager.lastFridgeScanTimeAgo,
+                    onTap: { navigationState.navigateTo(.fridgeItems) },
+                    onScan: { tabSelection.switchToTab(1) }
+                )
             }
-            .buttonStyle(.plain)
         }
-        .bwCardStyle(padding: 14, cornerRadius: 16)
+        .bwCardStyle(padding: 16, cornerRadius: 20)
     }
-    
-    // MARK: - Fridge Overview
-    private var fridgeOverviewSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("My Fridge")
-                    .font(BWTypography.cardTitle)
-                
-                Spacer()
-                
-                if dataManager.hasFridgeItems {
-                    Button(action: {
-                        BWHaptics.lightImpact()
-                        navigationState.navigateTo(.fridgeItems)
-                    }) {
-                        Text("View All")
-                            .font(BWTypography.buttonSmall)
-                            .foregroundColor(Color.bwFridgeBlue)
-                    }
-                }
-            }
-            
-            Button(action: {
-                BWHaptics.lightImpact()
-                navigationState.navigateTo(.fridgeItems)
-            }) {
-                HStack(spacing: 14) {
+
+    private func inventorySubCard(
+        title: String,
+        icon: String,
+        color: Color,
+        itemCount: Int,
+        lastUpdate: String?,
+        onTap: @escaping () -> Void,
+        onScan: @escaping () -> Void
+    ) -> some View {
+        Button(action: {
+            BWHaptics.lightImpact()
+            onTap()
+        }) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top) {
                     ZStack {
                         Circle()
                             .fill(
                                 LinearGradient(
-                                    colors: [Color.bwFridgeBlue.opacity(0.2), Color.bwFridgeBlue.opacity(0.08)],
+                                    colors: [color.opacity(0.2), color.opacity(0.08)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 50, height: 50)
-                        
-                        Image(systemName: "snowflake")
-                            .font(.system(size: 22, weight: .medium))
-                            .foregroundColor(Color.bwFridgeBlue)
+                            .frame(width: 40, height: 40)
+
+                        Image(systemName: icon)
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(color)
                     }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        if dataManager.hasFridgeItems {
-                            Text("\(dataManager.fridgeItems.count) items")
-                                .font(BWTypography.bodyPrimary)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            
-                            if let timeAgo = dataManager.lastFridgeScanTimeAgo {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "clock")
-                                        .font(.system(size: 10))
-                                    Text("Scanned \(timeAgo)")
-                                        .font(BWTypography.captionSmall)
-                                }
-                                .foregroundColor(Color.bwFridgeBlue.opacity(0.8))
-                            }
-                        } else {
-                            Text("No items scanned")
-                                .font(BWTypography.bodyPrimary)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
-                            
-                            Text("Scan your fridge to get started")
-                                .font(BWTypography.captionSmall)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
+
                     Spacer()
-                    
-                    // Scan button
+
                     Button(action: {
                         BWHaptics.lightImpact()
-                        navigationState.navigateTo(.photoUpload)
+                        onScan()
                     }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: dataManager.hasFridgeItems ? "plus" : "camera.fill")
-                                .font(.system(size: 12, weight: .semibold))
-                            Text(dataManager.hasFridgeItems ? "Scan" : "Scan")
-                                .font(BWTypography.buttonSmall)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(
-                            Capsule()
-                                .fill(Color.bwFridgeBlue)
-                        )
-                        .shadow(color: Color.bwFridgeBlue.opacity(0.3), radius: 4, x: 0, y: 2)
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(color.opacity(0.7))
                     }
                     .buttonStyle(.bwPressable)
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color(.tertiarySystemBackground))
-                )
-                .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(itemCount) items")
+                        .font(BWTypography.bodyPrimary)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+
+                    if let timeAgo = lastUpdate {
+                        Text("Updated \(timeAgo)")
+                            .font(BWTypography.captionSmall)
+                            .foregroundColor(color.opacity(0.8))
+                    } else {
+                        Text("Tap to manage")
+                            .font(BWTypography.captionSmall)
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
-            .buttonStyle(.plain)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color(.tertiarySystemBackground))
+            )
+            .adaptiveShadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 3)
         }
-        .bwCardStyle(padding: 14, cornerRadius: 16)
+        .buttonStyle(.plain)
     }
     
     // MARK: - Macro Overview
@@ -900,8 +808,7 @@ struct DashboardView: View {
                 Button(action: {
                     BWHaptics.lightImpact()
                     if proteinConsumed == 0 {
-                        // Navigate to scan for empty state
-                        navigationState.navigateTo(.photoUpload)
+                        tabSelection.switchToTab(1)
                     } else {
                         navigationState.navigateTo(.dailyMacroGoals)
                     }
@@ -1510,4 +1417,5 @@ struct LogBreakfastSheet: View {
 #Preview {
     DashboardView()
         .environmentObject(AppNavigationState())
+        .environmentObject(TabSelectionState())
 }

@@ -169,6 +169,7 @@ struct PantryItemsScreen: View {
             ExpandableFAB(
                 accentColor: .bwPrimary,
                 onScan: {
+                    SessionContext.shared.scanDestination = .pantry
                     navigationState.navigateTo(.photoUpload)
                 },
                 onManual: {
@@ -329,24 +330,8 @@ struct PantryItemRow: View {
     
     private let deleteThreshold: CGFloat = -80
     
-    // Icon based on item name
     private var itemIcon: String {
-        let lowercased = item.name.lowercased()
-        if lowercased.contains("oil") || lowercased.contains("olive") {
-            return "drop.fill"
-        } else if lowercased.contains("salt") || lowercased.contains("pepper") || lowercased.contains("spice") {
-            return "leaf.fill"
-        } else if lowercased.contains("rice") || lowercased.contains("pasta") || lowercased.contains("grain") {
-            return "circle.grid.3x3.fill"
-        } else if lowercased.contains("flour") || lowercased.contains("sugar") {
-            return "bag.fill"
-        } else if lowercased.contains("can") || lowercased.contains("bean") {
-            return "cylinder.fill"
-        } else if lowercased.contains("garlic") || lowercased.contains("onion") {
-            return "leaf.circle.fill"
-        } else {
-            return "cabinet.fill"
-        }
+        item.categoryIcon
     }
     
     var body: some View {
@@ -388,17 +373,17 @@ struct PantryItemRow: View {
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
                     
-                    Text("Pantry staple")
+                    Text(item.isStaple ? "\(item.categoryDisplayName) · Staple" : item.categoryDisplayName)
                         .font(BWTypography.captionSmall)
                         .foregroundColor(Color.bwAdaptivePrimary(for: colorScheme).opacity(0.8))
                 }
                 
                 Spacer()
                 
-                // Swipe hint
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.tertiary)
+//                // Swipe hint
+//                Image(systemName: "chevron.left")
+//                    .font(.system(size: 12, weight: .medium))
+//                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -453,6 +438,14 @@ struct AddPantryItemSheet: View {
         "Rice", "Pasta", "Olive Oil", "Salt", "Pepper", "Garlic",
         "Onions", "Flour", "Sugar", "Canned Beans", "Soy Sauce",
         "Vinegar", "Honey", "Oats", "Bread", "Butter"
+    ]
+    
+    private static let suggestionCategories: [String: String] = [
+        "Rice": "grain", "Pasta": "grain", "Olive Oil": "condiment",
+        "Salt": "condiment", "Pepper": "condiment", "Garlic": "vegetable",
+        "Onions": "vegetable", "Flour": "grain", "Sugar": "condiment",
+        "Canned Beans": "protein", "Soy Sauce": "condiment", "Vinegar": "condiment",
+        "Honey": "condiment", "Oats": "grain", "Bread": "grain", "Butter": "dairy"
     ]
     
     var body: some View {
@@ -573,9 +566,10 @@ struct AddPantryItemSheet: View {
     private func addItem() {
         guard !itemName.isEmpty else { return }
         
-        // Pantry items are staples by default - they won't be deducted when cooking
+        let trimmed = itemName.trimmingCharacters(in: .whitespacesAndNewlines)
         let newItem = Ingredient(
-            name: itemName.trimmingCharacters(in: .whitespacesAndNewlines),
+            name: trimmed,
+            category: Self.suggestionCategories[trimmed] ?? "other",
             isStaple: true
         )
         
@@ -585,8 +579,11 @@ struct AddPantryItemSheet: View {
     }
     
     private func addQuickItem(_ name: String) {
-        // Pantry items are staples by default
-        let newItem = Ingredient(name: name, isStaple: true)
+        let newItem = Ingredient(
+            name: name,
+            category: Self.suggestionCategories[name] ?? "other",
+            isStaple: true
+        )
         dataManager.addPantryItem(newItem)
         BWHaptics.success()
     }

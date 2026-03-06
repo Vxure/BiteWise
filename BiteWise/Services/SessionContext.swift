@@ -1,12 +1,22 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Scan Destination
+
+enum ScanDestination: String, CaseIterable {
+    case fridge = "Fridge"
+    case pantry = "Pantry"
+}
+
+// MARK: - Detected Ingredient
+
 /// Detected ingredient from Gemini Vision API
 struct DetectedIngredient: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
     var quantity: String
     var category: String
+    var isStaple: Bool = false
     
     /// Convert to the existing IngredientItem format used by DetectedIngredientsScreen
     func toIngredientItem() -> IngredientItem {
@@ -21,13 +31,13 @@ struct DetectedIngredient: Identifiable, Codable, Hashable {
 // MARK: - Dummy Data for Demo Mode
 extension DetectedIngredient {
     static var dummyData: [DetectedIngredient] = [
-        DetectedIngredient(name: "Chicken Breast", quantity: "2 pieces", category: "protein"),
-        DetectedIngredient(name: "Eggs", quantity: "6", category: "protein"),
-        DetectedIngredient(name: "Fresh Spinach", quantity: "1 bunch", category: "vegetable"),
-        DetectedIngredient(name: "Shredded Cheese", quantity: "1 cup", category: "dairy"),
-        DetectedIngredient(name: "Milk", quantity: "1 carton", category: "dairy"),
-        DetectedIngredient(name: "Butter", quantity: "1 stick", category: "dairy"),
-        DetectedIngredient(name: "Tomatoes", quantity: "4", category: "vegetable")
+        DetectedIngredient(name: "Chicken Breast", quantity: "2 pieces", category: "protein", isStaple: false),
+        DetectedIngredient(name: "Eggs", quantity: "6", category: "protein", isStaple: false),
+        DetectedIngredient(name: "Fresh Spinach", quantity: "1 bunch", category: "vegetable", isStaple: false),
+        DetectedIngredient(name: "Shredded Cheese", quantity: "1 cup", category: "dairy", isStaple: false),
+        DetectedIngredient(name: "Milk", quantity: "1 carton", category: "dairy", isStaple: false),
+        DetectedIngredient(name: "Butter", quantity: "1 stick", category: "dairy", isStaple: true),
+        DetectedIngredient(name: "Tomatoes", quantity: "4", category: "vegetable", isStaple: false)
     ]
 }
 
@@ -66,6 +76,9 @@ class SessionContext: ObservableObject {
     /// The currently active chat session (for multi-conversation support)
     @Published var activeChatSession: ChatSession?
     
+    /// Where scanned items should be saved (set by the source screen before navigating)
+    @Published var scanDestination: ScanDestination = .fridge
+    
     // MARK: - Initialization
     
     private init() {
@@ -84,8 +97,7 @@ class SessionContext: ObservableObject {
         analyzedImage = nil
         selectedIngredientNames = []
         currentRecipeContext = nil
-        // Note: Chat histories are persisted and not cleared on new session
-        // This allows users to reference past conversations
+        scanDestination = .fridge
     }
     
     /// Clear all session data including chat histories (for full reset)
@@ -97,8 +109,8 @@ class SessionContext: ObservableObject {
         generalChatHistory = []
         selectedIngredientNames = []
         currentRecipeContext = nil
+        scanDestination = .fridge
         
-        // Also clear persisted chat histories
         DataManager.shared.clearAllChatHistories()
     }
     

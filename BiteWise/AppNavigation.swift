@@ -40,6 +40,16 @@ class AppNavigationState: ObservableObject {
     }
 }
 
+class TabSelectionState: ObservableObject {
+    @Published var selectedTab: Int = 0
+    
+    func switchToTab(_ index: Int) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            selectedTab = index
+        }
+    }
+}
+
 /// Main navigation container for Taberoux app.
 ///
 /// ## Authentication Flow
@@ -532,9 +542,9 @@ struct MainTabView: View {
     @StateObject private var scanNavigationState = AppNavigationState()
     @StateObject private var assistantNavigationState = AppNavigationState()
     @StateObject private var settingsNavigationState = AppNavigationState()
+    @StateObject private var tabSelection = TabSelectionState()
     
     var initialTab: Int = 0
-    @State private var selectedTab = 0
     @State private var hasSetInitialTab = false
     
     private let tabItems = [
@@ -546,9 +556,8 @@ struct MainTabView: View {
     
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Use conditional view switching instead of TabView to allow navigation back gestures
             Group {
-                switch selectedTab {
+                switch tabSelection.selectedTab {
                 case 0:
                     dashboardStack
                 case 1:
@@ -563,13 +572,10 @@ struct MainTabView: View {
             }
             
             FloatingTabBar(
-                selectedTab: $selectedTab,
+                selectedTab: $tabSelection.selectedTab,
                 tabItems: tabItems,
                 onTabSelected: { tabIndex in
-                    // Only reset to root if tapping the SAME tab (standard iOS behavior)
-                    // This allows users to navigate back to root by tapping current tab
-                    // while preserving navigation stack when switching between tabs
-                    if tabIndex == selectedTab {
+                    if tabIndex == tabSelection.selectedTab {
                         resetNavigationForTab(tabIndex)
                     }
                 }
@@ -577,9 +583,8 @@ struct MainTabView: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            // Set initial tab only once (e.g., when coming from onboarding "Scan Now")
             if !hasSetInitialTab {
-                selectedTab = initialTab
+                tabSelection.selectedTab = initialTab
                 hasSetInitialTab = true
             }
         }
@@ -596,6 +601,7 @@ struct MainTabView: View {
                 .navigationBarTitleDisplayMode(.inline)
         }
         .environmentObject(dashboardNavigationState)
+        .environmentObject(tabSelection)
     }
     
     private var scanStack: some View {

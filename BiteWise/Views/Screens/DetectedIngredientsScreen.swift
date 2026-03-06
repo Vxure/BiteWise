@@ -31,6 +31,9 @@ struct DetectedIngredientsScreen: View {
     @State private var duplicatesToResolve: [DuplicateItem] = []
     @State private var pendingFridgeItems: [FridgeItem] = []
     
+    // Scan destination (fridge vs pantry)
+    @State private var scanDestination: ScanDestination = .fridge
+    
     // Header configuration
     private let headerHeight: CGFloat = 70
     
@@ -138,19 +141,19 @@ struct DetectedIngredientsScreen: View {
                     
                     Spacer()
                     
-                    // Get recipe suggestions button
                     GradientButton(
                         icon: "sparkles",
                         text: "Get Recipe Suggestions",
                         action: {
-                            // Save selected ingredients to session context
                             let selectedIngredients = ingredients.filter { $0.isSelected }
                             let selectedNames = selectedIngredients.map { $0.name }
                             sessionContext.updateSelectedIngredients(selectedNames)
                             
-                            // Also save to fridge items for persistence
-                            // Note: saveFridgeItems will call onContinue() after handling merge
-                            saveFridgeItems(selectedIngredients)
+                            if scanDestination == .fridge {
+                                saveFridgeItems(selectedIngredients)
+                            } else {
+                                savePantryItems(selectedIngredients)
+                            }
                         }
                     )
                     .padding(.horizontal, 20)
@@ -181,9 +184,14 @@ struct DetectedIngredientsScreen: View {
             .opacity(headerOpacity)
             .animation(.easeOut(duration: 0.2), value: headerVisible)
         }
-        .navigationTitle("Detected Ingredients")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .customNavigation()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ScanDestinationMenu(selection: $scanDestination, colorScheme: colorScheme)
+            }
+        }
         .toolbarBackground(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingAddIngredientSheet) {
             AddIngredientSheet(
@@ -220,6 +228,7 @@ struct DetectedIngredientsScreen: View {
             .presentationDragIndicator(.visible)
         }
         .onAppear {
+            scanDestination = sessionContext.scanDestination
             loadIngredientsFromContext()
         }
     }
@@ -292,18 +301,14 @@ struct DetectedIngredientsScreen: View {
     
     /// Save selected ingredients to fridge storage for persistence
     private func saveFridgeItems(_ items: [IngredientItem]) {
-        // Convert IngredientItem to FridgeItem
         let fridgeItems = items.map { item -> FridgeItem in
-            // Try to get category from detected ingredients if available
-            let detectedIngredient = sessionContext.detectedIngredients.first { $0.name == item.name }
-            let category = detectedIngredient?.category ?? "other"
-            let quantity = detectedIngredient?.quantity ?? ""
-            
+            let detected = sessionContext.detectedIngredients.first { $0.name == item.name }
             return FridgeItem(
                 name: item.name,
-                quantity: quantity,
-                category: category,
-                dateAdded: Date()
+                quantity: detected?.quantity ?? "",
+                category: detected?.category ?? "other",
+                dateAdded: Date(),
+                isStaple: detected?.isStaple ?? false
             )
         }
         
@@ -327,6 +332,27 @@ struct DetectedIngredientsScreen: View {
             dataManager.replaceFridgeItems(with: fridgeItems)
             onContinue()
         }
+    }
+    
+    /// Save selected ingredients to pantry storage
+    private func savePantryItems(_ items: [IngredientItem]) {
+        let existingNames = Set(dataManager.pantryItems.map { $0.name.lowercased() })
+        
+        let newItems = items.compactMap { item -> Ingredient? in
+            guard !existingNames.contains(item.name.lowercased()) else { return nil }
+            let detected = sessionContext.detectedIngredients.first { $0.name == item.name }
+            return Ingredient(
+                name: item.name,
+                quantity: detected?.quantity ?? "",
+                category: detected?.category ?? "other",
+                isStaple: detected?.isStaple ?? false
+            )
+        }
+        
+        for item in newItems {
+            dataManager.addPantryItem(item)
+        }
+        onContinue()
     }
     
     /// Apply the selected merge mode directly (used when skipping modal)
@@ -412,6 +438,48 @@ struct IngredientItem: Identifiable {
     let name: String
     var isSelected: Bool
     var isAIDetected: Bool
+}
+
+// MARK: - Scan Destination Menu
+struct ScanDestinationMenu: View {
+    @Binding var selection: ScanDestination
+    let colorScheme: ColorScheme
+    
+    private var pillColor: Color {
+        selection == .fridge
+            ? Color.bwAdaptiveFridgeBlue(for: colorScheme)
+            : Color.bwAdaptivePantryBrown(for: colorScheme)
+    }
+    
+    var body: some View {
+        Menu {
+            Button {
+                BWHaptics.selection()
+                withAnimation(.bwSnappy) { selection = .fridge }
+            } label: {
+                Label("Fridge", systemImage: "refrigerator")
+            }
+            
+            Button {
+                BWHaptics.selection()
+                withAnimation(.bwSnappy) { selection = .pantry }
+            } label: {
+                Label("Pantry", systemImage: "cabinet")
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(selection.rawValue)
+                    .font(.subheadline.weight(.semibold))
+                
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(pillColor, in: Capsule())
+        }
+    }
 }
 
 // Reusable component for each ingredient card

@@ -93,14 +93,18 @@ class GeminiService {
         }
         let base64Image = imageData.base64EncodedString()
         
-        // Build the prompt for ingredient detection (optimized)
         let prompt = """
         List all food items in this image.
         
         Return ONLY valid JSON:
-        {"ingredients":[{"name":"item name","quantity":"amount","category":"protein/vegetable/fruit/dairy/grain/condiment/beverage/other"}]}
+        {"ingredients":[{"name":"item name","quantity":"amount","category":"protein/vegetable/fruit/dairy/grain/condiment/beverage/other","isStaple":false}]}
         
         Be specific. Estimate quantities. Use exact category values.
+        
+        For each item, determine its isStaple status (boolean).
+        Set to true ONLY for foundational ingredients that users rarely need to track exact quantities for (e.g., salt, black pepper, sugar, standard cooking oils, basic spices).
+        Set to false for finite items that are used up in distinct quantities, even if they are stored in a pantry (e.g., a can of soup, a box of pasta, a bag of chips, snacks, perishables).
+        When in doubt, default to false.
         """
         
         // Build request body
@@ -489,6 +493,7 @@ class GeminiService {
                 let name: String
                 let quantity: String
                 let category: String
+                let isStaple: Bool?
             }
         }
         
@@ -498,7 +503,8 @@ class GeminiService {
                 DetectedIngredient(
                     name: dto.name,
                     quantity: dto.quantity,
-                    category: dto.category
+                    category: dto.category,
+                    isStaple: dto.isStaple ?? false
                 )
             }
         } catch {

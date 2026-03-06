@@ -181,6 +181,7 @@ struct FridgeItemsScreen: View {
             ExpandableFAB(
                 accentColor: .bwAccentBlue,
                 onScan: {
+                    SessionContext.shared.scanDestination = .fridge
                     navigationState.navigateTo(.photoUpload)
                 },
                 onManual: {
@@ -314,6 +315,7 @@ struct FridgeItemsScreen: View {
             
             Button(action: {
                 BWHaptics.mediumImpact()
+                SessionContext.shared.scanDestination = .fridge
                 navigationState.navigateTo(.photoUpload)
             }) {
                 HStack(spacing: 8) {

@@ -141,7 +141,7 @@ struct RecipeSuggestionScreen: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(Color.bwPrimary)
                         
-                        Text("Found \(recipes.count) recipe\(recipes.count == 1 ? "" : "s") for you!")
+                        Text("\(recipes.count) recipe\(recipes.count == 1 ? "" : "s") recommended for you")
                             .font(.bwSubheadline())
                             .fontWeight(.medium)
                             .foregroundColor(Color.bwPrimary)

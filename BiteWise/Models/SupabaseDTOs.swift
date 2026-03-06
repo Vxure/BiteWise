@@ -191,6 +191,7 @@ struct PantryItemDTO: Codable, Identifiable {
     var name: String
     var quantity: String
     var unit: String
+    var category: String
     var isStaple: Bool
     var createdAt: Date
     var updatedAt: Date
@@ -202,9 +203,24 @@ struct PantryItemDTO: Codable, Identifiable {
         case name
         case quantity
         case unit
+        case category
         case isStaple = "is_staple"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        ingredientId = try container.decodeIfPresent(UUID.self, forKey: .ingredientId)
+        name = try container.decode(String.self, forKey: .name)
+        quantity = try container.decodeIfPresent(String.self, forKey: .quantity) ?? ""
+        unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? ""
+        category = try container.decodeIfPresent(String.self, forKey: .category) ?? "other"
+        isStaple = try container.decodeIfPresent(Bool.self, forKey: .isStaple) ?? true
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
     
     /// Convert from local Ingredient model
@@ -215,6 +231,7 @@ struct PantryItemDTO: Codable, Identifiable {
         self.name = ingredient.name
         self.quantity = ingredient.quantity
         self.unit = ingredient.unit
+        self.category = ingredient.category
         self.isStaple = ingredient.isStaple
         self.createdAt = Date()
         self.updatedAt = Date()
@@ -227,6 +244,7 @@ struct PantryItemDTO: Codable, Identifiable {
             name: name,
             quantity: quantity,
             unit: unit,
+            category: category,
             isSelected: true,
             isStaple: isStaple
         )

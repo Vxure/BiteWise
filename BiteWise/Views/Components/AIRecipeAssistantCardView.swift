@@ -101,3 +101,4 @@ struct AIRecipeAssistantCardView: View {
     .padding()
     .bwBackground()
 }
+
