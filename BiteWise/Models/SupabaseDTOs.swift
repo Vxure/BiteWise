@@ -268,6 +268,7 @@ struct RecipeDTO: Codable, Identifiable {
     var fats: Double
     var ingredients: [String]  // JSONB array
     var steps: [String]        // JSONB array
+    var cookingSteps: [CookingStep]?  // JSONB array of structured steps
     var isPublic: Bool
     var isAiGenerated: Bool
     var createdAt: Date
@@ -288,6 +289,7 @@ struct RecipeDTO: Codable, Identifiable {
         case fats
         case ingredients
         case steps
+        case cookingSteps = "cooking_steps"
         case isPublic = "is_public"
         case isAiGenerated = "is_ai_generated"
         case createdAt = "created_at"
@@ -310,6 +312,7 @@ struct RecipeDTO: Codable, Identifiable {
         self.fats = recipe.macros.fats
         self.ingredients = recipe.ingredients
         self.steps = recipe.steps
+        self.cookingSteps = recipe.cookingSteps
         self.isPublic = false
         self.isAiGenerated = isAiGenerated
         self.createdAt = Date()
@@ -332,7 +335,8 @@ struct RecipeDTO: Codable, Identifiable {
                 carbs: carbs,
                 fats: fats,
                 calories: calories
-            )
+            ),
+            cookingSteps: cookingSteps
         )
     }
 }

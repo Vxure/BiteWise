@@ -21,6 +21,26 @@ enum AppScreen: Hashable {
     case fridgeItems
     case pantryItems
     case chatSettings
+    
+    // Auth screens
+    case authWelcome
+    case authLogin
+    case authRegister
+    case authForgotPassword
+    case authVerifyEmail
+    case authMagicLinkSent
+    
+    // New onboarding screens
+    case onboardingIntroduction
+    case onboardingName
+    case onboardingAge
+    case onboardingDietary
+    case onboardingAllergies
+    case onboardingExperience
+    case onboardingCookingTime
+    case onboardingTastePreferences
+    case onboardingMacroTracking
+    case onboardingCongratulations
 }
 
 class AppNavigationState: ObservableObject {
@@ -54,19 +74,9 @@ class TabSelectionState: ObservableObject {
 ///
 /// ## Authentication Flow
 ///
-/// The app supports two modes of operation:
-/// 1. **Authenticated Mode**: Full access to all features with cloud sync
-/// 2. **Guest Mode**: Limited to local storage only (no Supabase sync)
-///
-/// ### Guest Mode Limitations
-///
-/// When users choose "Continue as Guest", they can use the app but:
-/// - All data is stored locally on the device only
-/// - Supabase RLS policies require `auth.uid()` which is NULL for guests
-/// - Data will not sync across devices or be backed up
-/// - Certain features will prompt users to create an account
-///
-/// See `GuestModeService` for detailed documentation on guest mode handling.
+/// Users must authenticate (sign up or sign in) before accessing the app.
+/// The onboarding flow requires authentication first, then walks users through
+/// pantry setup and macro goals before entering the main app.
 ///
 struct AppNavigation: View {
     @StateObject private var navigationState = AppNavigationState()
@@ -83,8 +93,6 @@ struct AppNavigation: View {
     /// Security timeout for password reset (5 minutes)
     private let passwordResetTimeout: TimeInterval = 300
     
-    /// User can access main app if authenticated OR in guest mode
-    /// Uses GuestModeService.isGuestMode as single source of truth
     private var canAccessMainApp: Bool {
         authService.isAuthenticated || guestModeService.isGuestMode
     }
@@ -110,23 +118,18 @@ struct AppNavigation: View {
             // Main content based on auth state
             Group {
                 if isCheckingAuth {
-                    // Loading state while checking authentication
                     AuthLoadingView()
                 } else if !hasCompletedOnboarding {
-                    // New user or user who hasn't finished onboarding - show full onboarding flow
                     OnboardingFlow(
                         onComplete: {
-                            initialTabAfterOnboarding = 0 // Dashboard tab
+                            initialTabAfterOnboarding = 0
                             hasCompletedOnboarding = true
                         },
                         onCompleteWithScan: {
-                            initialTabAfterOnboarding = 1 // Scan tab
+                            initialTabAfterOnboarding = 1
                             hasCompletedOnboarding = true
                         },
-                        onSkipAuth: {
-                            // User chose to continue as guest
-                            // Note: Guest data is local-only, see GuestModeService for details
-                            // GuestModeService is the single source of truth for guest mode state
+                        onDevSkip: {
                             guestModeService.enableGuestMode()
                             initialTabAfterOnboarding = 0
                             hasCompletedOnboarding = true
@@ -134,18 +137,12 @@ struct AppNavigation: View {
                     )
                     .transition(.opacity)
                 } else if !canAccessMainApp {
-                    // Returning user who completed onboarding but logged out and not in guest mode
-                    AuthView(onSkip: {
-                        // GuestModeService is the single source of truth for guest mode state
-                        guestModeService.enableGuestMode()
-                    })
-                    .transition(.opacity)
+                    ReturningUserAuthFlow()
+                        .transition(.opacity)
                 } else {
-                    // Authenticated or guest mode - show main app
                     MainTabView(initialTab: initialTabAfterOnboarding)
                         .environmentObject(navigationState)
                         .transition(.opacity)
-                        .guestModePrompt() // Show account prompt when guest tries cloud features
                 }
             }
             
@@ -170,7 +167,6 @@ struct AppNavigation: View {
         .animation(.easeInOut(duration: 0.3), value: authService.isAuthenticated)
         .animation(.easeInOut(duration: 0.3), value: hasCompletedOnboarding)
         .animation(.easeInOut(duration: 0.3), value: isCheckingAuth)
-        .animation(.easeInOut(duration: 0.3), value: guestModeService.isGuestMode)
         .animation(.easeInOut(duration: 0.3), value: showPasswordResetOverlay)
         .task {
             // Check for existing session on app launch
@@ -315,66 +311,57 @@ struct AuthLoadingView: View {
     }
 }
 
-// Onboarding flow: Welcome → Pantry → Macro Goals → Completion → Signup (auth at end)
-// This flow lets users experience value before asking for account creation
-struct OnboardingFlow: View {
+// Auth flow for returning users (completed onboarding, logged out).
+// AuthLoginScreen as root -- no welcome. Navigation auto-resolves when
+// authService.isAuthenticated becomes true (canAccessMainApp flips in AppNavigation).
+struct ReturningUserAuthFlow: View {
     @StateObject private var navigationState = AppNavigationState()
+    @StateObject private var authViewModel = AuthViewModel(initialState: .login)
     @ObservedObject private var authService = AuthService.shared
-    var onComplete: () -> Void
-    var onCompleteWithScan: (() -> Void)?
-    var onSkipAuth: (() -> Void)?
+    @EnvironmentObject private var deepLinkManager: DeepLinkStateManager
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = true
+    @State private var didRegisterNewAccount = false
     
     var body: some View {
         NavigationStack(path: $navigationState.path) {
-            WelcomeScreen {
-                navigationState.navigateTo(.pantrySetup)
-            }
+            AuthLoginScreen(
+                viewModel: authViewModel,
+                onSignUp: { navigationState.navigateTo(.authRegister) },
+                onForgotPassword: { navigationState.navigateTo(.authForgotPassword) },
+                onMagicLinkSent: { navigationState.navigateTo(.authMagicLinkSent) }
+            )
             .navigationDestination(for: AppScreen.self) { screen in
                 switch screen {
-                case .welcome:
-                    WelcomeScreen {
-                        navigationState.navigateTo(.pantrySetup)
-                    }
-                
-                case .pantrySetup:
-                    PantrySetupScreen {
-                        // Navigate to macro goals after pantry setup
-                        navigationState.navigateTo(.macroGoalsOnboarding)
-                    }
-                
-                case .macroGoalsOnboarding:
-                    MacroGoalsOnboardingScreen(
-                        onContinue: {
-                            // Navigate to completion screen (celebrate before auth)
-                            navigationState.navigateTo(.onboardingCompletion)
-                        },
-                        onSkip: {
-                            // Navigate to completion screen (celebrate before auth)
-                            navigationState.navigateTo(.onboardingCompletion)
+                case .authRegister:
+                    AuthRegisterScreen(
+                        viewModel: authViewModel,
+                        onSignIn: { navigationState.navigateBack() },
+                        onSuccess: {
+                            didRegisterNewAccount = true
+                            navigationState.navigateTo(.authVerifyEmail)
                         }
                     )
                 
-                case .onboardingCompletion:
-                    OnboardingCompletionScreen(
-                        onComplete: {
-                            // Go to signup to save data
-                            navigationState.navigateTo(.signup)
-                        },
-                        onScanNow: {
-                            // Go to signup to save data (will scan after)
-                            navigationState.navigateTo(.signup)
-                        }
+                case .authForgotPassword:
+                    AuthForgotPasswordScreen(
+                        initialEmail: authViewModel.email,
+                        onBackToLogin: { navigationState.navigateBack() }
                     )
                 
-                case .signup:
-                    OnboardingAuthView(
-                        onComplete: {
-                            // After successful signup, go to main app
-                            onComplete()
-                        },
-                        onSkip: {
-                            // User chose to continue as guest
-                            onSkipAuth?()
+                case .authVerifyEmail:
+                    AuthVerifyEmailScreen(
+                        email: authViewModel.email,
+                        viewModel: authViewModel,
+                        onBackToLogin: { navigationState.navigateToRoot() }
+                    )
+                
+                case .authMagicLinkSent:
+                    AuthMagicLinkSentScreen(
+                        email: authViewModel.email,
+                        viewModel: authViewModel,
+                        onBackToLogin: {
+                            authViewModel.backToLogin()
+                            navigationState.navigateToRoot()
                         }
                     )
                 
@@ -385,11 +372,248 @@ struct OnboardingFlow: View {
             .navigationBarTitleDisplayMode(.inline)
             .environmentObject(navigationState)
         }
-        // Listen for auth state changes to auto-advance after signup
         .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
-            if isAuthenticated && navigationState.path.count > 0 {
-                // User just signed up - the OnboardingAuthView will handle navigation
+            if isAuthenticated, didRegisterNewAccount {
+                hasCompletedOnboarding = false
             }
+        }
+        .onChange(of: deepLinkManager.showSuccess) { _, showSuccess in
+            if showSuccess, let message = deepLinkManager.successMessage, message.contains("Email verified") {
+                if case .awaitingEmailVerification(let email) = authViewModel.authState {
+                    authViewModel.transitionToVerifiedAwaitingLogin(email: email)
+                }
+                navigationState.navigateToRoot()
+            }
+        }
+    }
+}
+
+// Welcome → Auth (new screens) → Onboarding → Pantry/Macro/Completion → Congratulations → Main App
+struct OnboardingFlow: View {
+    @StateObject private var navigationState = AppNavigationState()
+    @StateObject private var authViewModel = AuthViewModel(initialState: .signup)
+    @ObservedObject private var authService = AuthService.shared
+    @EnvironmentObject private var deepLinkManager: DeepLinkStateManager
+    @State private var hasStartedOnboarding = false
+    var onComplete: () -> Void
+    var onCompleteWithScan: (() -> Void)?
+    var onDevSkip: (() -> Void)?
+    
+    var body: some View {
+        NavigationStack(path: $navigationState.path) {
+            WelcomeScreen {
+                navigationState.navigateTo(.authWelcome)
+            }
+            .navigationDestination(for: AppScreen.self) { screen in
+                switch screen {
+                case .welcome:
+                    WelcomeScreen {
+                        navigationState.navigateTo(.authWelcome)
+                    }
+                
+                case .authWelcome:
+                    AuthWelcomeScreen(
+                        onLogin: { navigationState.navigateTo(.authLogin) },
+                        onRegister: { navigationState.navigateTo(.authRegister) },
+                        onDevSkip: onDevSkip
+                    )
+                
+                case .authLogin:
+                    AuthLoginScreen(
+                        viewModel: authViewModel,
+                        onSignUp: { navigationState.navigateTo(.authRegister) },
+                        onForgotPassword: { navigationState.navigateTo(.authForgotPassword) },
+                        onMagicLinkSent: { navigationState.navigateTo(.authMagicLinkSent) }
+                    )
+                
+                case .authRegister:
+                    AuthRegisterScreen(
+                        viewModel: authViewModel,
+                        onSignIn: { navigationState.navigateTo(.authLogin) },
+                        onSuccess: { navigationState.navigateTo(.authVerifyEmail) }
+                    )
+                
+                case .authForgotPassword:
+                    AuthForgotPasswordScreen(
+                        initialEmail: authViewModel.email,
+                        onBackToLogin: { navigationState.navigateBack() }
+                    )
+                
+                case .authVerifyEmail:
+                    AuthVerifyEmailScreen(
+                        email: authViewModel.email,
+                        viewModel: authViewModel,
+                        onBackToLogin: {
+                            navigationState.navigateToRoot()
+                            navigationState.navigateTo(.authLogin)
+                        }
+                    )
+                
+                case .authMagicLinkSent:
+                    AuthMagicLinkSentScreen(
+                        email: authViewModel.email,
+                        viewModel: authViewModel,
+                        onBackToLogin: {
+                            authViewModel.backToLogin()
+                            navigationState.navigateBack()
+                        }
+                    )
+                
+                case .onboardingIntroduction:
+                    OnboardingIntroductionScreen {
+                        navigationState.navigateTo(.onboardingName)
+                    }
+                
+                case .onboardingName:
+                    OnboardingNameScreen(
+                        onContinue: { navigationState.navigateTo(.onboardingAge) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .onboardingAge:
+                    OnboardingAgeScreen(
+                        onContinue: { navigationState.navigateTo(.onboardingDietary) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .onboardingDietary:
+                    OnboardingDietaryScreen(
+                        onContinue: { navigationState.navigateTo(.onboardingAllergies) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .onboardingAllergies:
+                    OnboardingAllergiesScreen(
+                        onContinue: { navigationState.navigateTo(.onboardingExperience) },
+                        onSkip: { navigationState.navigateTo(.onboardingExperience) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .onboardingExperience:
+                    OnboardingExperienceScreen(
+                        onContinue: { navigationState.navigateTo(.onboardingCookingTime) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .onboardingCookingTime:
+                    OnboardingCookingTimeScreen(
+                        onContinue: { navigationState.navigateTo(.onboardingTastePreferences) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .onboardingTastePreferences:
+                    OnboardingTastePreferencesScreen(
+                        onContinue: { navigationState.navigateTo(.onboardingMacroTracking) },
+                        onSkip: { navigationState.navigateTo(.onboardingMacroTracking) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .onboardingMacroTracking:
+                    OnboardingMacroTrackingScreen(
+                        onContinue: { navigationState.navigateTo(.pantrySetup) },
+                        onSkip: { navigationState.navigateTo(.pantrySetup) },
+                        onBack: { navigationState.navigateBack() }
+                    )
+                
+                case .pantrySetup:
+                    PantrySetupScreen {
+                        navigationState.navigateTo(.macroGoalsOnboarding)
+                    }
+                
+                case .macroGoalsOnboarding:
+                    MacroGoalsOnboardingScreen(
+                        onContinue: {
+                            navigationState.navigateTo(.onboardingCompletion)
+                        },
+                        onSkip: {
+                            navigationState.navigateTo(.onboardingCompletion)
+                        }
+                    )
+                
+                case .onboardingCompletion:
+                    OnboardingCompletionScreen(
+                        onComplete: {
+                            navigationState.navigateTo(.onboardingCongratulations)
+                        },
+                        onScanNow: {
+                            navigationState.navigateTo(.onboardingCongratulations)
+                        }
+                    )
+                
+                case .onboardingCongratulations:
+                    OnboardingCongratulationsScreen {
+                        onComplete()
+                    }
+                
+                default:
+                    EmptyView()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .environmentObject(navigationState)
+        }
+        .task {
+            if authService.isAuthenticated, !hasStartedOnboarding {
+                handlePostAuth()
+            }
+        }
+        .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
+            if isAuthenticated, !hasStartedOnboarding {
+                handlePostAuth()
+            }
+        }
+        .onChange(of: deepLinkManager.showSuccess) { _, showSuccess in
+            if showSuccess, !hasStartedOnboarding,
+               let message = deepLinkManager.successMessage, message.contains("Email verified") {
+                if case .awaitingEmailVerification(let email) = authViewModel.authState {
+                    authViewModel.transitionToVerifiedAwaitingLogin(email: email)
+                }
+                navigationState.navigateToRoot()
+                navigationState.navigateTo(.authLogin)
+            }
+        }
+    }
+    
+    private func handlePostAuth() {
+        guard !hasStartedOnboarding else { return }
+        hasStartedOnboarding = true
+        
+        if let user = authService.currentUser {
+            var profile = DataManager.shared.userProfile
+            if let email = user.email, profile.email.isEmpty {
+                profile.email = email
+            }
+            if profile.name.isEmpty, let metadata = user.userMetadata["name"] {
+                if case .string(let name) = metadata {
+                    profile.name = name
+                }
+            }
+            DataManager.shared.userProfile = profile
+            DataManager.shared.saveUserProfile()
+        }
+        
+        BWHaptics.success()
+        
+        if isLoginAction() {
+            withAnimation(.easeInOut) {
+                onComplete()
+            }
+        } else {
+            navigationState.navigateTo(.onboardingIntroduction)
+        }
+    }
+    
+    private func isLoginAction() -> Bool {
+        switch authViewModel.authState {
+        case .login, .awaitingMagicLink, .verifiedAwaitingLogin, .passwordResetPending:
+            return true
+        case .awaitingEmailVerification:
+            return false
+        case .signup:
+            if case .magicLinkAuthenticated = deepLinkManager.lastResult {
+                return true
+            }
+            return false
         }
     }
 }
@@ -740,12 +964,11 @@ struct MainTabView: View {
                 navigationState.navigateBack()
             }
         
-        case .signup:
-            // This screen is only used during onboarding flow, not in main app navigation
-            EmptyView()
-        
-        case .onboardingCompletion:
-            // This screen is only used during onboarding flow, not in main app navigation
+        case .signup, .onboardingCompletion,
+             .authWelcome, .authLogin, .authRegister, .authForgotPassword, .authVerifyEmail, .authMagicLinkSent,
+             .onboardingIntroduction, .onboardingName, .onboardingAge, .onboardingDietary,
+             .onboardingAllergies, .onboardingExperience, .onboardingCookingTime,
+             .onboardingTastePreferences, .onboardingMacroTracking, .onboardingCongratulations:
             EmptyView()
         }
     }

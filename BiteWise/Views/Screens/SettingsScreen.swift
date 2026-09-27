@@ -118,7 +118,11 @@ struct SettingsView: View {
                             }
                             
                             SettingsRow(icon: "arrow.counterclockwise", title: "Reset Onboarding", color: Color.bwAccentOrange) {
-                                hasCompletedOnboarding = false
+                                Task {
+                                    try? await AuthService.shared.signOut()
+                                    GuestModeService.shared.resetGuestMode()
+                                    hasCompletedOnboarding = false
+                                }
                             }
                         }
                         .background(Color(.secondarySystemBackground))

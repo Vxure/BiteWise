@@ -91,13 +91,28 @@ enum DeepLinkType: String {
     case emailChange = "email_change"
     case invite
     
-    /// Initialize from URL query parameter
+    /// Initialize from URL query or fragment parameter.
+    /// Supabase may encode `type` in query params (`?type=magiclink`) or
+    /// in the URL fragment (`#access_token=...&type=magiclink`).
     init?(from url: URL) {
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let typeParam = components.queryItems?.first(where: { $0.name == "type" })?.value else {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return nil
         }
-        self.init(rawValue: typeParam)
+        let typeValue = components.queryItems?.first(where: { $0.name == "type" })?.value
+            ?? Self.fragmentParameter(named: "type", from: components.fragment)
+        guard let typeValue else { return nil }
+        self.init(rawValue: typeValue)
+    }
+    
+    private static func fragmentParameter(named name: String, from fragment: String?) -> String? {
+        guard let fragment else { return nil }
+        return fragment.components(separatedBy: "&")
+            .compactMap { pair -> (String, String)? in
+                let parts = pair.components(separatedBy: "=")
+                guard parts.count == 2 else { return nil }
+                return (parts[0], parts[1])
+            }
+            .first(where: { $0.0 == name })?.1
     }
 }
 

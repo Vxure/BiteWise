@@ -24,6 +24,12 @@ let supabase: SupabaseClient = {
     
     return SupabaseClient(
         supabaseURL: supabaseURL,
-        supabaseKey: supabaseKey
+        supabaseKey: supabaseKey,
+        options: .init(
+            auth: .init(
+                redirectToURL: URL(string: "bitewise://auth"),
+                flowType: .implicit
+            )
+        )
     )
 }()

@@ -33,6 +33,7 @@ struct RecipeDetailScreen: View {
     var onFeedback: () -> Void
     @State private var userRating: Int = 0
     @State private var showingAIAssistant: Bool = false
+    @State private var showingCookingInstructions: Bool = false
     @State private var showingDeductionAlert: Bool = false
     @State private var deductedItems: [String] = []
     @ObservedObject private var dataManager = DataManager.shared
@@ -365,6 +366,26 @@ struct RecipeDetailScreen: View {
                         action: { showingAIAssistant = true }
                     )
                     .padding(.top, 4)
+                    
+                    // Start Cooking button
+                    Button(action: {
+                        BWHaptics.mediumImpact()
+                        showingCookingInstructions = true
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                            Text("Start Cooking")
+                                .font(BWTypography.buttonLabel)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(BWGradients.primaryGradient(for: colorScheme))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .adaptiveShadow(color: Color.bwPrimary.opacity(0.2), radius: 8, x: 0, y: 4)
+                    }
+                    .buttonStyle(.bwPressable)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 100)
@@ -517,9 +538,13 @@ struct RecipeDetailScreen: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(isPresented: $showingAIAssistant) {
-            // Go directly to ChatbotScreen with recipe context (skip intro)
             ChatbotScreen(recipe: recipe) {
                 showingAIAssistant = false
+            }
+        }
+        .fullScreenCover(isPresented: $showingCookingInstructions) {
+            CookingInstructionsScreen(recipe: recipe) {
+                showingCookingInstructions = false
             }
         }
         .alert("Ingredients Removed", isPresented: $showingDeductionAlert) {

@@ -17,6 +17,9 @@ final class DeepLinkStateManager: ObservableObject {
     /// The pending deep link result that needs to be handled
     @Published var pendingResult: DeepLinkResult?
     
+    /// The most recent deep link result, used for post-auth routing on cold launch
+    @Published var lastResult: DeepLinkResult?
+    
     /// Error message to display for deep link failures
     @Published var errorMessage: String?
     @Published var showError: Bool = false
@@ -29,6 +32,7 @@ final class DeepLinkStateManager: ObservableObject {
     
     /// Handle a deep link result and update app state accordingly
     func handleResult(_ result: DeepLinkResult) {
+        lastResult = result
         switch result {
         case .signupConfirmed:
             // Handled via notification in AuthViewModel

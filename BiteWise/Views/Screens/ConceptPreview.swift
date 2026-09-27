@@ -159,7 +159,7 @@ struct ComboCard: View {
                 
                 // Center: Dynamic Icon Cluster
                 HStack(spacing: 15) {
-                    Image(systemName: "leaf.fill") // Main Base
+                    Image(systemName: "leaf.fill") // Main Base 
                         .font(.system(size: 40))
                         .foregroundStyle(.white)
                         .shadow(radius: 2)

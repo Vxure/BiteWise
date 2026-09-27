@@ -12,21 +12,13 @@ struct AuthView: View {
     @EnvironmentObject private var deepLinkManager: DeepLinkStateManager
     @Environment(\.colorScheme) var colorScheme
     
-    var onSkip: (() -> Void)?
-    
-    init(onSkip: (() -> Void)? = nil) {
-        self.onSkip = onSkip
-    }
-    
     var body: some View {
         ZStack {
-            // Animated background (shared across all states)
             AuthAnimatedBackground()
             
-            // Content based on auth state
             switch viewModel.authState {
             case .login, .signup, .verifiedAwaitingLogin:
-                AuthFormView(viewModel: viewModel, onSkip: onSkip)
+                AuthFormView(viewModel: viewModel)
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
                         removal: .move(edge: .leading).combined(with: .opacity)
@@ -119,8 +111,6 @@ struct AuthFormView: View {
     @Environment(\.scenePhase) var scenePhase
     @FocusState private var focusedField: AuthField?
     
-    var onSkip: (() -> Void)?
-    
     // Animation states
     @State private var logoScale: CGFloat = 0.6
     @State private var logoOpacity: Double = 0
@@ -184,12 +174,6 @@ struct AuthFormView: View {
                     switchModeFooter
                         .padding(.top, 24)
                     
-                    // Skip / Guest mode option
-                    if let onSkip = onSkip {
-                        skipButton(action: onSkip)
-                            .padding(.top, 16)
-                    }
-                    
                     Spacer(minLength: 40)
                 }
                 .padding(.bottom, 20)
@@ -197,7 +181,6 @@ struct AuthFormView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedField) { _, newField in
-                // Scroll to form when keyboard appears
                 if newField != nil {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         proxy.scrollTo("authForm", anchor: .center)
@@ -211,7 +194,6 @@ struct AuthFormView: View {
         .onTapGesture {
             focusedField = nil
         }
-        // Security: Clear password fields when app goes to background
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
                 viewModel.password = ""
@@ -219,21 +201,6 @@ struct AuthFormView: View {
                 focusedField = nil
             }
         }
-    }
-    
-    // MARK: - Skip Button
-    
-    private func skipButton(action: @escaping () -> Void) -> some View {
-        Button {
-            BWHaptics.lightImpact()
-            action()
-        } label: {
-            Text("Continue as Guest")
-                .font(BWTypography.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-        }
-        .opacity(contentOpacity)
     }
     
     // MARK: - Error Action Helpers
@@ -1100,29 +1067,27 @@ struct AuthTextField: View {
 struct OnboardingAuthView: View {
     @StateObject private var viewModel: AuthViewModel
     @ObservedObject private var authService = AuthService.shared
-    @ObservedObject private var guestModeService = GuestModeService.shared
     @EnvironmentObject private var deepLinkManager: DeepLinkStateManager
     @Environment(\.colorScheme) var colorScheme
     
     var onComplete: () -> Void
-    var onSkip: (() -> Void)?
+    var onDevSkip: (() -> Void)?
+    var onContinueOnboarding: (() -> Void)?
     
-    init(onComplete: @escaping () -> Void, onSkip: (() -> Void)? = nil) {
+    init(onComplete: @escaping () -> Void, onDevSkip: (() -> Void)? = nil, onContinueOnboarding: (() -> Void)? = nil) {
         self.onComplete = onComplete
-        self.onSkip = onSkip
-        // Initialize with signup state
+        self.onDevSkip = onDevSkip
+        self.onContinueOnboarding = onContinueOnboarding
         _viewModel = StateObject(wrappedValue: AuthViewModel(initialState: .signup))
     }
     
     var body: some View {
         ZStack {
-            // Animated background
             AuthAnimatedBackground()
             
-            // Content based on auth state
             switch viewModel.authState {
             case .login, .signup, .verifiedAwaitingLogin:
-                OnboardingAuthFormView(viewModel: viewModel, onSkip: onSkip)
+                OnboardingAuthFormView(viewModel: viewModel, onDevSkip: onDevSkip, onContinueOnboarding: onContinueOnboarding)
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
                         removal: .move(edge: .leading).combined(with: .opacity)
@@ -1187,26 +1152,11 @@ struct OnboardingAuthView: View {
         .navigationBarBackButtonHidden(false)
         .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
             if isAuthenticated {
-                // Migrate guest data if user was previously a guest
-                // This pushes local data to Supabase before loading cloud data
-                if guestModeService.wasInGuestMode {
-                    Task {
-                        let migrationSucceeded = await DataManager.shared.migrateGuestDataOnFirstAuth()
-                        // Only clear flag if migration succeeded, so it can be retried on failure
-                        if migrationSucceeded {
-                            guestModeService.clearWasInGuestMode()
-                        }
-                    }
-                }
-                
-                // Update local profile with auth user data (for login flow)
                 if let user = authService.currentUser {
                     var profile = DataManager.shared.userProfile
-                    // Only update email if not already set (signup already sets both)
                     if let email = user.email, profile.email.isEmpty {
                         profile.email = email
                     }
-                    // Try to get name from user metadata if local profile name is empty
                     if profile.name.isEmpty, let metadata = user.userMetadata["name"] {
                         if case .string(let name) = metadata {
                             profile.name = name
@@ -1216,7 +1166,6 @@ struct OnboardingAuthView: View {
                     DataManager.shared.saveUserProfile()
                 }
                 
-                // Successfully signed in - proceed to completion
                 BWHaptics.success()
                 onComplete()
             }
@@ -1242,7 +1191,8 @@ struct OnboardingAuthFormView: View {
     @Environment(\.scenePhase) var scenePhase
     @FocusState private var focusedField: OnboardingAuthField?
     
-    var onSkip: (() -> Void)?
+    var onDevSkip: (() -> Void)?
+    var onContinueOnboarding: (() -> Void)?
     
     // Animation states
     @State private var logoScale: CGFloat = 0.6
@@ -1311,11 +1261,35 @@ struct OnboardingAuthFormView: View {
                     switchModeFooter
                         .padding(.top, 20)
                     
-                    // Skip / Guest mode option
-                    if let onSkip = onSkip {
-                        skipButton(action: onSkip)
-                            .padding(.top, 16)
+                    if let onContinueOnboarding = onContinueOnboarding {
+                        Button {
+                            BWHaptics.lightImpact()
+                            onContinueOnboarding()
+                        } label: {
+                            Text("Preview Onboarding →")
+                                .font(BWTypography.bodySecondary)
+                                .fontWeight(.semibold)
+                                .foregroundColor(Color.bwPrimary)
+                        }
+                        .padding(.top, 16)
+                        .opacity(contentOpacity)
                     }
+                    
+                    #if DEBUG
+                    if let onDevSkip = onDevSkip {
+                        Button {
+                            BWHaptics.lightImpact()
+                            onDevSkip()
+                        } label: {
+                            Text("Skip Login (DEV)")
+                                .font(BWTypography.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.red.opacity(0.7))
+                        }
+                        .padding(.top, 12)
+                        .opacity(contentOpacity)
+                    }
+                    #endif
                     
                     Spacer(minLength: 40)
                 }
@@ -1324,7 +1298,6 @@ struct OnboardingAuthFormView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: focusedField) { _, newField in
-                // Scroll to form when keyboard appears
                 if newField != nil {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         proxy.scrollTo("onboardingAuthForm", anchor: .center)
@@ -1338,7 +1311,6 @@ struct OnboardingAuthFormView: View {
         .onTapGesture {
             focusedField = nil
         }
-        // Security: Clear password fields when app goes to background
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
                 viewModel.password = ""
@@ -1348,29 +1320,14 @@ struct OnboardingAuthFormView: View {
         }
     }
     
-    // MARK: - Skip Button
-    
-    private func skipButton(action: @escaping () -> Void) -> some View {
-        Button {
-            BWHaptics.lightImpact()
-            action()
-        } label: {
-            Text("Continue as Guest")
-                .font(BWTypography.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-        }
-        .opacity(contentOpacity)
-    }
-    
     // MARK: - Progress Indicator
     
     private var progressIndicator: some View {
         HStack(spacing: 8) {
             ForEach(0..<4) { index in
                 Capsule()
-                    .fill(index == 3 ? Color.bwPrimary : Color.bwPrimary.opacity(0.3))
-                    .frame(width: index == 3 ? 24 : 8, height: 4)
+                    .fill(index == 0 ? Color.bwPrimary : Color.bwPrimary.opacity(0.3))
+                    .frame(width: index == 0 ? 24 : 8, height: 4)
             }
         }
         .opacity(contentOpacity)
@@ -1425,7 +1382,7 @@ struct OnboardingAuthFormView: View {
     // MARK: - Title Section
     
     private var titleSection: some View {
-        Text(viewModel.isLoginMode ? "Welcome back" : "Almost there!")
+        Text(viewModel.isLoginMode ? "Welcome back" : "Let's get started")
             .font(BWTypography.sectionHeader)
             .foregroundStyle(
                 LinearGradient(
@@ -1443,7 +1400,7 @@ struct OnboardingAuthFormView: View {
     private var subtitleSection: some View {
         Text(viewModel.isLoginMode 
              ? "Sign in to access your saved preferences" 
-             : "Create your account to save your preferences")
+             : "Create an account to personalize your experience")
             .font(BWTypography.bodySecondary)
             .foregroundColor(.secondary)
             .multilineTextAlignment(.center)

@@ -181,9 +181,10 @@ class GeminiService {
         \(budgetText)
         
         Return ONLY valid JSON:
-        {"recipes":[{"title":"Name","description":"Brief desc","prepTime":10,"cookTime":20,"ingredients":["1 cup item"],"steps":["Step 1"],"macros":{"calories":350,"protein":25,"carbs":30,"fats":12}}]}
+        {"recipes":[{"title":"Name","description":"Brief desc","prepTime":10,"cookTime":20,"ingredients":["1 cup item"],"steps":["Step 1"],"macros":{"calories":350,"protein":25,"carbs":30,"fats":12},"cookingSteps":[{"title":"Short step name","instruction":"Detailed step instruction","durationMinutes":5,"ingredients":["items used in this step"],"chefTip":"Practical tip specific to this step"}]}]}
         
         Rules: Use available ingredients. Never use allergens. Realistic macros. Clear steps.
+        Each recipe MUST include cookingSteps with a title, detailed instruction, realistic durationMinutes, the specific ingredients used in that step, and a practical chef's tip relevant to that step. Every ingredient must appear in at least one cookingStep. The sum of all durationMinutes should roughly equal prepTime + cookTime.
         """
         
         let requestBody: [String: Any] = [
@@ -198,7 +199,7 @@ class GeminiService {
                 "temperature": 0.7,
                 "topK": 40,
                 "topP": 0.95,
-                "maxOutputTokens": 4096
+                "maxOutputTokens": 8192
             ]
         ]
         
@@ -351,9 +352,10 @@ class GeminiService {
         \(pantryText.isEmpty ? "" : "PANTRY: \(pantryText)")\(baseRecipeText)
         
         Return ONLY valid JSON:
-        {"title":"Name","description":"Brief desc","prepTime":10,"cookTime":20,"ingredients":["1 cup item"],"steps":["Step 1"],"macros":{"calories":350,"protein":25,"carbs":30,"fats":12}}
+        {"title":"Name","description":"Brief desc","prepTime":10,"cookTime":20,"ingredients":["1 cup item"],"steps":["Step 1"],"macros":{"calories":350,"protein":25,"carbs":30,"fats":12},"cookingSteps":[{"title":"Short step name","instruction":"Detailed step instruction","durationMinutes":5,"ingredients":["items used in this step"],"chefTip":"Practical tip specific to this step"}]}
         
         Rules: Never use allergens. Use available ingredients. Realistic macros. Clear steps.
+        MUST include cookingSteps with a title, detailed instruction, realistic durationMinutes, the specific ingredients used in that step, and a practical chef's tip relevant to that step. Every ingredient must appear in at least one cookingStep. The sum of all durationMinutes should roughly equal prepTime + cookTime.
         """
         
         let requestBody: [String: Any] = [
@@ -368,7 +370,7 @@ class GeminiService {
                 "temperature": 0.7,
                 "topK": 40,
                 "topP": 0.95,
-                "maxOutputTokens": 2048
+                "maxOutputTokens": 4096
             ]
         ]
         
@@ -531,12 +533,21 @@ class GeminiService {
                 let ingredients: [String]
                 let steps: [String]
                 let macros: MacrosDTO
+                let cookingSteps: [CookingStepDTO]?
                 
                 struct MacrosDTO: Codable {
                     let calories: Int
                     let protein: Double
                     let carbs: Double
                     let fats: Double
+                }
+                
+                struct CookingStepDTO: Codable {
+                    let title: String
+                    let instruction: String
+                    let durationMinutes: Int
+                    let ingredients: [String]
+                    let chefTip: String
                 }
             }
         }
@@ -557,7 +568,16 @@ class GeminiService {
                         carbs: dto.macros.carbs,
                         fats: dto.macros.fats,
                         calories: dto.macros.calories
-                    )
+                    ),
+                    cookingSteps: dto.cookingSteps?.map { step in
+                        CookingStep(
+                            title: step.title,
+                            instruction: step.instruction,
+                            durationMinutes: step.durationMinutes,
+                            ingredients: step.ingredients,
+                            chefTip: step.chefTip
+                        )
+                    }
                 )
             }
         } catch {
@@ -599,12 +619,21 @@ class GeminiService {
             let ingredients: [String]
             let steps: [String]
             let macros: MacrosDTO
+            let cookingSteps: [CookingStepDTO]?
             
             struct MacrosDTO: Codable {
                 let calories: Int
                 let protein: Double
                 let carbs: Double
                 let fats: Double
+            }
+            
+            struct CookingStepDTO: Codable {
+                let title: String
+                let instruction: String
+                let durationMinutes: Int
+                let ingredients: [String]
+                let chefTip: String
             }
         }
         
@@ -623,7 +652,16 @@ class GeminiService {
                     carbs: dto.macros.carbs,
                     fats: dto.macros.fats,
                     calories: dto.macros.calories
-                )
+                ),
+                cookingSteps: dto.cookingSteps?.map { step in
+                    CookingStep(
+                        title: step.title,
+                        instruction: step.instruction,
+                        durationMinutes: step.durationMinutes,
+                        ingredients: step.ingredients,
+                        chefTip: step.chefTip
+                    )
+                }
             )
         } catch {
             throw GeminiError.decodingError(error)
@@ -668,7 +706,14 @@ class GeminiService {
                 ],
                 prepTime: 10,
                 cookTime: 15,
-                macros: MacroNutrients(protein: 42, carbs: 35, fats: 18, calories: 480)
+                macros: MacroNutrients(protein: 42, carbs: 35, fats: 18, calories: 480),
+                cookingSteps: [
+                    CookingStep(title: "Season the chicken", instruction: "Season chicken breast with salt, pepper, and your favorite herbs on both sides.", durationMinutes: 2, ingredients: ["8 oz chicken breast"], chefTip: "Let the seasoned chicken sit for a few minutes so the salt draws out moisture for a better sear."),
+                    CookingStep(title: "Grill the chicken", instruction: "Grill chicken for 6-7 minutes per side until the internal temperature reaches 165°F.", durationMinutes: 14, ingredients: ["8 oz chicken breast"], chefTip: "Only flip the chicken once -- resist the urge to move it around for the best grill marks."),
+                    CookingStep(title: "Rest and slice", instruction: "Let the chicken rest for 5 minutes on a cutting board, then slice against the grain.", durationMinutes: 6, ingredients: ["8 oz chicken breast"], chefTip: "Resting lets the juices redistribute -- cutting too early means dry chicken."),
+                    CookingStep(title: "Build the bowl", instruction: "Arrange quinoa as a base in a bowl. Top with mixed greens, halved cherry tomatoes, and sliced chicken.", durationMinutes: 2, ingredients: ["1 cup cooked quinoa", "1 cup mixed greens", "1/2 cup cherry tomatoes"], chefTip: "Warm the quinoa slightly before assembling for a more satisfying bowl."),
+                    CookingStep(title: "Finish and serve", instruction: "Add avocado slices and drizzle with olive oil and fresh lemon juice.", durationMinutes: 1, ingredients: ["1/4 avocado", "2 tbsp olive oil", "Lemon juice to taste"], chefTip: "Cut the avocado right before serving to prevent browning.")
+                ]
             )
         } else if lowercased.contains("low carb") || lowercased.contains("keto") {
             return Recipe(
@@ -719,7 +764,15 @@ class GeminiService {
                 ],
                 prepTime: 5,
                 cookTime: 8,
-                macros: MacroNutrients(protein: 21, carbs: 4, fats: 22, calories: 295)
+                macros: MacroNutrients(protein: 21, carbs: 4, fats: 22, calories: 295),
+                cookingSteps: [
+                    CookingStep(title: "Prep the eggs", instruction: "Whisk eggs with a pinch of salt and pepper until well combined.", durationMinutes: 1, ingredients: ["3 large eggs", "Salt and pepper to taste"], chefTip: "Add a tiny splash of water to the eggs for a fluffier scramble."),
+                    CookingStep(title: "Heat the pan", instruction: "Melt butter in a non-stick pan over medium heat until it starts to foam.", durationMinutes: 1, ingredients: ["1 tbsp butter"], chefTip: "Medium heat is key -- too hot and you'll get rubbery eggs."),
+                    CookingStep(title: "Sauté the peppers", instruction: "Add diced bell pepper and sauté for 2 minutes until slightly softened.", durationMinutes: 2, ingredients: ["1/4 cup diced bell pepper"], chefTip: "Keep the peppers slightly crisp for a nice textural contrast."),
+                    CookingStep(title: "Wilt the spinach", instruction: "Add spinach to the pan and cook for about 30 seconds until just wilted.", durationMinutes: 1, ingredients: ["1/4 cup spinach"], chefTip: "Spinach reduces dramatically in volume -- don't worry if it looks like a lot."),
+                    CookingStep(title: "Scramble the eggs", instruction: "Pour in the whisked eggs and gently push them from the edges toward the center, forming soft curds.", durationMinutes: 3, ingredients: ["3 large eggs"], chefTip: "Pull the pan off heat while eggs are still slightly wet -- they'll finish cooking from residual heat."),
+                    CookingStep(title: "Top and serve", instruction: "Sprinkle cheese on top and serve immediately while hot.", durationMinutes: 1, ingredients: ["2 tbsp cheese"], chefTip: "Let the cheese melt on the hot eggs for 30 seconds before plating.")
+                ]
             )
         } else if lowercased.contains("vegetarian") || lowercased.contains("veggie") {
             return Recipe(
@@ -771,7 +824,14 @@ class GeminiService {
                 ],
                 prepTime: 10,
                 cookTime: 30,
-                macros: MacroNutrients(protein: 35, carbs: 28, fats: 14, calories: 385)
+                macros: MacroNutrients(protein: 35, carbs: 28, fats: 14, calories: 385),
+                cookingSteps: [
+                    CookingStep(title: "Preheat the oven", instruction: "Preheat your oven to 400°F (200°C). Position the rack in the center.", durationMinutes: 1, ingredients: [], chefTip: "A fully preheated oven is essential for even roasting and crispy edges."),
+                    CookingStep(title: "Prep the ingredients", instruction: "Cut chicken breast and sweet potato into even 1-inch pieces. Break broccoli into bite-sized florets.", durationMinutes: 7, ingredients: ["6 oz chicken breast", "1 cup broccoli florets", "1 cup diced sweet potato"], chefTip: "Even-sized pieces cook at the same rate -- this is the secret to perfectly roasted sheet pan meals."),
+                    CookingStep(title: "Season everything", instruction: "Toss all pieces with olive oil, Italian seasoning, salt, and pepper in a large bowl until well coated.", durationMinutes: 2, ingredients: ["2 tbsp olive oil", "Italian seasoning", "Salt and pepper"], chefTip: "Use your hands to toss -- it gives the most even coating compared to a spoon."),
+                    CookingStep(title: "Arrange and roast", instruction: "Spread everything on a baking sheet in a single layer without crowding. Roast for 25-30 minutes.", durationMinutes: 28, ingredients: ["6 oz chicken breast", "1 cup broccoli florets", "1 cup diced sweet potato"], chefTip: "Don't crowd the pan -- if pieces touch, they steam instead of roast. Use two sheets if needed."),
+                    CookingStep(title: "Rest and serve", instruction: "Remove from oven and let rest for 5 minutes before plating. The chicken continues to cook slightly while resting.", durationMinutes: 5, ingredients: [], chefTip: "Check the chicken with a thermometer -- 165°F internal means it's perfectly done.")
+                ]
             )
         }
     }
@@ -780,24 +840,33 @@ class GeminiService {
     private func createModifiedRecipe(base: Recipe, description: String) -> Recipe {
         let lowercased = description.lowercased()
         var modified = base
-        modified.id = UUID() // New ID for the modified recipe
+        modified.id = UUID()
+        
+        let substituteIngredient: (String) -> String = { ingredient in
+            let lower = ingredient.lowercased()
+            if lowercased.contains("dairy-free") || lowercased.contains("dairy free") {
+                if lower.contains("cheese") { return ingredient.replacingOccurrences(of: "cheese", with: "nutritional yeast", options: .caseInsensitive) }
+                if lower.contains("butter") { return ingredient.replacingOccurrences(of: "butter", with: "olive oil", options: .caseInsensitive) }
+                if lower.contains("milk") { return ingredient.replacingOccurrences(of: "milk", with: "almond milk", options: .caseInsensitive) }
+                if lower.contains("cream") { return ingredient.replacingOccurrences(of: "cream", with: "coconut cream", options: .caseInsensitive) }
+            } else if lowercased.contains("low carb") || lowercased.contains("fewer carbs") || lowercased.contains("reduce carbs") {
+                if lower.contains("pasta") || lower.contains("spaghetti") {
+                    return ingredient.replacingOccurrences(of: "pasta", with: "zucchini noodles", options: .caseInsensitive)
+                        .replacingOccurrences(of: "spaghetti", with: "zucchini noodles", options: .caseInsensitive)
+                }
+                if lower.contains("rice") && !lower.contains("cauliflower") { return ingredient.replacingOccurrences(of: "rice", with: "cauliflower rice", options: .caseInsensitive) }
+                if lower.contains("potato") { return ingredient.replacingOccurrences(of: "potato", with: "cauliflower", options: .caseInsensitive) }
+            } else if lowercased.contains("vegetarian") {
+                if lower.contains("chicken") || lower.contains("beef") || lower.contains("pork") { return "1 block firm tofu, cubed" }
+                if lower.contains("bacon") || lower.contains("pancetta") { return "4 oz smoked tempeh" }
+            }
+            return ingredient
+        }
         
         if lowercased.contains("dairy-free") || lowercased.contains("dairy free") {
             modified.title = "Dairy-Free \(base.title)"
             modified.description = "A dairy-free version of \(base.title). \(base.description)"
-            modified.ingredients = base.ingredients.map { ingredient in
-                let lower = ingredient.lowercased()
-                if lower.contains("cheese") {
-                    return ingredient.replacingOccurrences(of: "cheese", with: "nutritional yeast", options: .caseInsensitive)
-                } else if lower.contains("butter") {
-                    return ingredient.replacingOccurrences(of: "butter", with: "olive oil", options: .caseInsensitive)
-                } else if lower.contains("milk") {
-                    return ingredient.replacingOccurrences(of: "milk", with: "almond milk", options: .caseInsensitive)
-                } else if lower.contains("cream") {
-                    return ingredient.replacingOccurrences(of: "cream", with: "coconut cream", options: .caseInsensitive)
-                }
-                return ingredient
-            }
+            modified.ingredients = base.ingredients.map(substituteIngredient)
         } else if lowercased.contains("spicy") || lowercased.contains("spicier") {
             modified.title = "Spicy \(base.title)"
             modified.description = "A spicier version with added heat. \(base.description)"
@@ -806,18 +875,7 @@ class GeminiService {
         } else if lowercased.contains("low carb") || lowercased.contains("fewer carbs") || lowercased.contains("reduce carbs") {
             modified.title = "Low-Carb \(base.title)"
             modified.description = "A lower-carb adaptation. \(base.description)"
-            modified.ingredients = base.ingredients.map { ingredient in
-                let lower = ingredient.lowercased()
-                if lower.contains("pasta") || lower.contains("spaghetti") {
-                    return ingredient.replacingOccurrences(of: "pasta", with: "zucchini noodles", options: .caseInsensitive)
-                        .replacingOccurrences(of: "spaghetti", with: "zucchini noodles", options: .caseInsensitive)
-                } else if lower.contains("rice") && !lower.contains("cauliflower") {
-                    return ingredient.replacingOccurrences(of: "rice", with: "cauliflower rice", options: .caseInsensitive)
-                } else if lower.contains("potato") {
-                    return ingredient.replacingOccurrences(of: "potato", with: "cauliflower", options: .caseInsensitive)
-                }
-                return ingredient
-            }
+            modified.ingredients = base.ingredients.map(substituteIngredient)
             modified.macros.carbs = max(5, base.macros.carbs * 0.4)
             modified.macros.calories = max(200, base.macros.calories - 100)
         } else if lowercased.contains("more protein") || lowercased.contains("high protein") {
@@ -829,19 +887,16 @@ class GeminiService {
         } else if lowercased.contains("vegetarian") {
             modified.title = "Vegetarian \(base.title)"
             modified.description = "A meat-free version. \(base.description)"
-            modified.ingredients = base.ingredients.map { ingredient in
-                let lower = ingredient.lowercased()
-                if lower.contains("chicken") || lower.contains("beef") || lower.contains("pork") {
-                    return "1 block firm tofu, cubed"
-                } else if lower.contains("bacon") || lower.contains("pancetta") {
-                    return "4 oz smoked tempeh"
-                }
-                return ingredient
-            }
+            modified.ingredients = base.ingredients.map(substituteIngredient)
         } else {
-            // Generic modification
             modified.title = "Modified \(base.title)"
             modified.description = "Customized based on your preferences. \(base.description)"
+        }
+        
+        modified.cookingSteps = base.cookingSteps?.map { step in
+            var modifiedStep = step
+            modifiedStep.ingredients = step.ingredients.map(substituteIngredient)
+            return modifiedStep
         }
         
         return modified
