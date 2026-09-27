@@ -639,7 +639,7 @@ final class SupabaseDataService {
         
         let insertDTO = ActivityFeedInsertDTO(
             userId: userId,
-            activityType: activity.type.rawValue,
+            activityType: activity.type.databaseValue,
             title: activity.title,
             relatedId: activity.relatedId
         )

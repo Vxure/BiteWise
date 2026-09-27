@@ -20,6 +20,34 @@ struct ActivityItem: Identifiable, Codable {
     }
 }
 
+// MARK: - Database Mapping
+extension ActivityItem.ActivityType {
+    /// Value stored in `activity_feed.activity_type`. Must match the table's CHECK constraint.
+    /// `rawValue` stays camelCase because it is persisted locally via Codable.
+    var databaseValue: String {
+        switch self {
+        case .cookedRecipe: return "cooked_recipe"
+        case .addedPantryItem: return "added_pantry_item"
+        case .addedFridgeItem: return "added_fridge_item"
+        case .ratedRecipe: return "rated_recipe"
+        case .favoritedRecipe: return "favorited_recipe"
+        case .submittedFeedback: return "submitted_feedback"
+        }
+    }
+
+    init?(databaseValue: String) {
+        switch databaseValue {
+        case "cooked_recipe": self = .cookedRecipe
+        case "added_pantry_item": self = .addedPantryItem
+        case "added_fridge_item": self = .addedFridgeItem
+        case "rated_recipe": self = .ratedRecipe
+        case "favorited_recipe": self = .favoritedRecipe
+        case "submitted_feedback": self = .submittedFeedback
+        default: return nil
+        }
+    }
+}
+
 // MARK: - Display Properties
 extension ActivityItem {
     /// Icon to display for this activity type

@@ -598,7 +598,7 @@ struct ActivityFeedDTO: Codable, Identifiable {
     init(from activity: ActivityItem, userId: UUID) {
         self.id = activity.id
         self.userId = userId
-        self.activityType = activity.type.rawValue
+        self.activityType = activity.type.databaseValue
         self.title = activity.title
         self.relatedId = activity.relatedId
         self.createdAt = activity.timestamp
@@ -606,7 +606,7 @@ struct ActivityFeedDTO: Codable, Identifiable {
     
     /// Convert to local ActivityItem model
     func toActivityItem() -> ActivityItem? {
-        guard let type = ActivityItem.ActivityType(rawValue: activityType) else {
+        guard let type = ActivityItem.ActivityType(databaseValue: activityType) else {
             return nil
         }
         return ActivityItem(
