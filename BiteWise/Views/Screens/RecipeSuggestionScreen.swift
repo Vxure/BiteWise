@@ -9,8 +9,7 @@ private struct ScrollOffsetPreferenceKey: PreferenceKey {
 }
 
 struct RecipeSuggestionScreen: View {
-    @State private var recipes: [Recipe] = []
-    @State private var isLoading = true
+    @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingAIAssistant = false
     @ObservedObject private var sessionContext = SessionContext.shared
@@ -26,6 +25,10 @@ struct RecipeSuggestionScreen: View {
     private let headerHeight: CGFloat = 100
     
     var onRecipeSelected: (Recipe) -> Void
+    
+    private var recipes: [Recipe] {
+        sessionContext.generatedRecipes
+    }
     
     // MARK: - Header Animation Calculations
     
@@ -188,7 +191,7 @@ struct RecipeSuggestionScreen: View {
         .customNavigation()
         .toolbarBackground(.hidden, for: .navigationBar)
         .onAppear {
-            if recipes.isEmpty {
+            if !sessionContext.hasValidCachedRecipes {
                 loadRecipes()
             }
         }
@@ -249,8 +252,7 @@ struct RecipeSuggestionScreen: View {
                 )
                 
                 await MainActor.run {
-                    recipes = generatedRecipes
-                    sessionContext.generatedRecipes = generatedRecipes
+                    sessionContext.storeGeneratedRecipes(generatedRecipes, for: ingredientNames)
                     isLoading = false
                 }
             } catch {

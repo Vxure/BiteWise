@@ -57,6 +57,9 @@ class SessionContext: ObservableObject {
     /// Recipes generated based on detected ingredients
     @Published var generatedRecipes: [Recipe] = []
     
+    /// Sorted ingredient names that produced `generatedRecipes`
+    private(set) var recipesIngredientKey: [String]?
+    
     /// The image that was analyzed (for display purposes)
     @Published var analyzedImage: UIImage?
     
@@ -93,7 +96,7 @@ class SessionContext: ObservableObject {
     /// Called when user uploads a new photo
     func startNewSession() {
         detectedIngredients = []
-        generatedRecipes = []
+        invalidateRecipes()
         analyzedImage = nil
         selectedIngredientNames = []
         currentRecipeContext = nil
@@ -103,7 +106,7 @@ class SessionContext: ObservableObject {
     /// Clear all session data including chat histories (for full reset)
     func clearAllSessionData() {
         detectedIngredients = []
-        generatedRecipes = []
+        invalidateRecipes()
         analyzedImage = nil
         recipeChatHistories = [:]
         generalChatHistory = []
@@ -117,6 +120,51 @@ class SessionContext: ObservableObject {
     /// Update selected ingredients from the DetectedIngredientsScreen
     func updateSelectedIngredients(_ names: [String]) {
         selectedIngredientNames = names
+    }
+    
+    // MARK: - Generated Recipe Cache
+    
+    /// True when `generatedRecipes` were produced from the current ingredient selection
+    var hasValidCachedRecipes: Bool {
+        !generatedRecipes.isEmpty && recipesIngredientKey == ingredientNamesForRecipes.sorted()
+    }
+    
+    /// Store freshly generated recipes and persist them as the latest batch
+    /// - Parameters:
+    ///   - recipes: The generated recipes
+    ///   - ingredients: The ingredient names the recipes were generated from
+    func storeGeneratedRecipes(_ recipes: [Recipe], for ingredients: [String]) {
+        let key = ingredients.sorted()
+        generatedRecipes = recipes
+        recipesIngredientKey = key
+        DataManager.shared.saveLatestGeneratedRecipes(recipes, ingredientKey: key)
+    }
+    
+    /// Show recipes for the current ingredients without persisting them as a generated batch
+    func showRecipes(_ recipes: [Recipe]) {
+        generatedRecipes = recipes
+        recipesIngredientKey = ingredientNamesForRecipes.sorted()
+    }
+    
+    /// Clear the in-session recipes so the next visit to suggestions regenerates
+    func invalidateRecipes() {
+        generatedRecipes = []
+        recipesIngredientKey = nil
+    }
+    
+    /// Load the last persisted batch into the session as a valid cache
+    /// - Returns: false if no batch has been persisted
+    @discardableResult
+    func restoreLatestRecipes() -> Bool {
+        let dataManager = DataManager.shared
+        guard !dataManager.latestGeneratedRecipes.isEmpty,
+              let key = dataManager.latestRecipesIngredientKey else {
+            return false
+        }
+        generatedRecipes = dataManager.latestGeneratedRecipes
+        recipesIngredientKey = key
+        selectedIngredientNames = key
+        return true
     }
     
     // MARK: - Per-Recipe Chat History Management

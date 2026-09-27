@@ -67,6 +67,9 @@ struct DashboardView: View {
     }
 
     private var heroRecipes: [Recipe] {
+        if !dataManager.latestGeneratedRecipes.isEmpty {
+            return Array(dataManager.latestGeneratedRecipes.prefix(8))
+        }
         if !dataManager.recipeHistory.isEmpty {
             return Array(dataManager.recipeHistory.prefix(8))
         }
@@ -418,7 +421,10 @@ struct DashboardView: View {
                 Spacer()
                 Button(action: {
                     BWHaptics.lightImpact()
-                    SessionContext.shared.generatedRecipes = Array(dataManager.recipeHistory)
+                    let sessionContext = SessionContext.shared
+                    if !sessionContext.restoreLatestRecipes() {
+                        sessionContext.showRecipes(Array(dataManager.recipeHistory))
+                    }
                     navigationState.navigateTo(.recipeSuggestion)
                 }) {
                     Text("View All")
@@ -479,8 +485,9 @@ struct DashboardView: View {
                 Text(recipe.title)
                     .font(BWTypography.cardTitle)
                     .foregroundColor(.primary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 6) {
                     CompactMacroBadge(value: recipe.macros.carbs, type: .carbs)

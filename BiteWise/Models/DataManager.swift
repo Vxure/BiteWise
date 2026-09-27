@@ -14,6 +14,8 @@ class DataManager: ObservableObject {
     @Published var userProfile: UserProfile
     @Published var pantryItems: [Ingredient]
     @Published var recipeHistory: [Recipe]
+    @Published var latestGeneratedRecipes: [Recipe]
+    @Published var latestRecipesIngredientKey: [String]?
     @Published var dailyMacros: DailyMacroLog
     @Published var cookedRecipeIDs: Set<UUID>
     @Published var recipeRatings: [UUID: Int]
@@ -40,6 +42,8 @@ class DataManager: ObservableObject {
     private static let currentDataVersion = 1
     private let pantryItemsKey = "pantryItems"
     private let recipeHistoryKey = "recipeHistory"
+    private static let latestGeneratedRecipesKey = "latestGeneratedRecipes"
+    private static let latestRecipesIngredientKeyKey = "latestRecipesIngredientKey"
     private let dailyMacrosKey = "dailyMacros"
     private let cookedRecipesKey = "cookedRecipeIDs"
     private let recipeRatingsKey = "recipeRatings"
@@ -64,6 +68,8 @@ class DataManager: ObservableObject {
         self.userProfile = DataManager.loadUserProfile() ?? UserProfile.dummy
         self.pantryItems = DataManager.loadPantryItems() ?? []
         self.recipeHistory = DataManager.loadRecipeHistory() ?? []
+        self.latestGeneratedRecipes = DataManager.loadCodable([Recipe].self, forKey: DataManager.latestGeneratedRecipesKey) ?? []
+        self.latestRecipesIngredientKey = DataManager.loadCodable([String].self, forKey: DataManager.latestRecipesIngredientKeyKey)
         self.dailyMacros = DataManager.loadDailyMacros() ?? DailyMacroLog()
         self.cookedRecipeIDs = DataManager.loadCookedRecipes()
         self.recipeRatings = DataManager.loadRecipeRatings()
@@ -227,6 +233,14 @@ class DataManager: ObservableObject {
             recipeHistory = Array(recipeHistory.prefix(20))
         }
         saveRecipeHistory()
+    }
+    
+    // MARK: - Latest Generated Recipes
+    func saveLatestGeneratedRecipes(_ recipes: [Recipe], ingredientKey: [String]) {
+        latestGeneratedRecipes = recipes
+        latestRecipesIngredientKey = ingredientKey
+        saveCodable(recipes, forKey: DataManager.latestGeneratedRecipesKey)
+        saveCodable(ingredientKey, forKey: DataManager.latestRecipesIngredientKeyKey)
     }
     
     // MARK: - Daily Macros
@@ -1544,6 +1558,8 @@ class DataManager: ObservableObject {
             userProfileKey,
             pantryItemsKey,
             recipeHistoryKey,
+            DataManager.latestGeneratedRecipesKey,
+            DataManager.latestRecipesIngredientKeyKey,
             dailyMacrosKey,
             cookedRecipesKey,
             recipeRatingsKey,
@@ -1574,6 +1590,8 @@ class DataManager: ObservableObject {
         userProfile = UserProfile.dummy
         pantryItems = []
         recipeHistory = []
+        latestGeneratedRecipes = []
+        latestRecipesIngredientKey = nil
         dailyMacros = DailyMacroLog()
         cookedRecipeIDs = []
         recipeRatings = [:]

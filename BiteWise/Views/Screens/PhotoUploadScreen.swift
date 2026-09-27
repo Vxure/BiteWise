@@ -268,6 +268,8 @@ struct PhotoUploadScreen: View {
                 await MainActor.run {
                     // Store results in session context
                     sessionContext.detectedIngredients = ingredients
+                    sessionContext.updateSelectedIngredients([])
+                    sessionContext.invalidateRecipes()
                     isAnalyzing = false
                     selectedImage = nil
                     
@@ -289,6 +291,8 @@ struct PhotoUploadScreen: View {
         // Clear any previous detected ingredients
         sessionContext.detectedIngredients = []
         sessionContext.analyzedImage = nil
+        sessionContext.updateSelectedIngredients([])
+        sessionContext.invalidateRecipes()
         
         // Navigate to detected ingredients screen with empty state
         onContinue()
